@@ -21,8 +21,18 @@ option(EASY3D_BUILD_TESTS "Build Easy3D tests" ON)
 # CNA's compiled .cpp files. The easy3d library compiles against the headers
 # alone, but anything that *runs* that math (e.g. Camera3D::GetViewMatrix) must
 # LINK the CNA library. Linking CNA pulls in heavy deps (SHARP_RUNTIME, SDL3,
-# ffmpeg, a graphics backend), so it is opt-in and OFF by default.
-option(EASY3D_LINK_CNA "Link the compiled CNA library (needed to run camera math / build camera example + test)" OFF)
+# ffmpeg, a graphics backend), so building CNA ourselves is opt-in and OFF by
+# default. (A parent project that already defines the `CNA` target is detected
+# and linked automatically regardless of this option — see below.)
+option(EASY3D_LINK_CNA "When building standalone, build CNA from EASY3D_CNA_DIR and link it (enables the camera example + test)" OFF)
+
+# CNA requires exactly one graphics backend to be selected. This picks which one
+# to enable when easy3d builds CNA itself (EASY3D_LINK_CNA=ON). On Linux EASY_GL
+# is the lightest, most-tested choice. Ignored when the parent project provides
+# the CNA target (then the parent already chose a backend).
+set(EASY3D_CNA_BACKEND "EASY_GL"
+    CACHE STRING "CNA backend to enable when easy3d builds CNA itself: SDL_RENDERER | EASY_GL | BGFX | VULKAN")
+set_property(CACHE EASY3D_CNA_BACKEND PROPERTY STRINGS SDL_RENDERER EASY_GL BGFX VULKAN)
 
 # ---------------------------------------------------------------------------
 # Locate CNA (companion runtime, expected at ../cna)
@@ -59,27 +69,63 @@ target_include_directories(easy3d
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-if(EASY3D_CNA_INCLUDE_DIR)
-    # PUBLIC: Easy3D's public headers include CNA's math headers.
+# ---------------------------------------------------------------------------
+# Resolve CNA linkage
+# ---------------------------------------------------------------------------
+# easy3d ends up linked against CNA in one of three ways:
+#   (1) A parent project (e.g. a game using both CNA and Easy3D) already defined
+#       the `CNA` target before add_subdirectory(easy-3d). We detect and link it.
+#   (2) Standalone build with -DEASY3D_LINK_CNA=ON: we add_subdirectory(../cna)
+#       ourselves (selecting a backend, with CNA's own demos/tests disabled).
+#   (3) Otherwise: headers only. easy3d still compiles; the consuming application
+#       links CNA itself. This keeps the default build light and self-contained.
+set(_easy3d_have_cna_target OFF)
+
+if(TARGET CNA)
+    # (1) Provided by the parent project — the integration path for games.
+    set(_easy3d_have_cna_target ON)
+    message(STATUS "Easy3D: linking the 'CNA' target provided by the parent project.")
+elseif(EASY3D_LINK_CNA)
+    # (2) Build CNA ourselves from EASY3D_CNA_DIR.
+    if(NOT EXISTS "${EASY3D_CNA_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "Easy3D: EASY3D_LINK_CNA=ON but no CNA CMake project at '${EASY3D_CNA_DIR}'. "
+            "Set -DEASY3D_CNA_DIR=/path/to/cna.")
+    endif()
+    # Keep CNA's own demos/tests out of our build.
+    set(CNA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(CNA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    # Select exactly one CNA graphics backend (CNA fails to configure otherwise).
+    if(EASY3D_CNA_BACKEND STREQUAL "SDL_RENDERER")
+        set(CNA_BACKEND_SDL_RENDERER ON CACHE BOOL "" FORCE)
+    elseif(EASY3D_CNA_BACKEND STREQUAL "EASY_GL")
+        set(CNA_BACKEND_EASY_GL ON CACHE BOOL "" FORCE)
+    elseif(EASY3D_CNA_BACKEND STREQUAL "BGFX")
+        set(CNA_BACKEND_BGFX ON CACHE BOOL "" FORCE)
+    elseif(EASY3D_CNA_BACKEND STREQUAL "VULKAN")
+        set(CNA_BACKEND_VULKAN ON CACHE BOOL "" FORCE)
+    else()
+        message(FATAL_ERROR
+            "Easy3D: unknown EASY3D_CNA_BACKEND '${EASY3D_CNA_BACKEND}' "
+            "(use SDL_RENDERER, EASY_GL, BGFX or VULKAN).")
+    endif()
+    message(STATUS "Easy3D: building CNA from '${EASY3D_CNA_DIR}' (backend: ${EASY3D_CNA_BACKEND}).")
+    add_subdirectory("${EASY3D_CNA_DIR}" "${CMAKE_BINARY_DIR}/_cna")
+    set(_easy3d_have_cna_target ON)
+endif()
+
+if(_easy3d_have_cna_target)
+    # CNA propagates its PUBLIC include dirs (the Microsoft/Xna headers).
+    target_link_libraries(easy3d PUBLIC CNA)
+    target_compile_definitions(easy3d PUBLIC EASY3D_HAS_CNA_LINK)
+elseif(EASY3D_CNA_INCLUDE_DIR)
+    # (3) Headers-only: compile against CNA headers; consumer links CNA later.
     target_include_directories(easy3d PUBLIC "${EASY3D_CNA_INCLUDE_DIR}")
 endif()
 
-# Linking CNA (optional; see EASY3D_LINK_CNA above).
-#
-# TODO(QUESTIONS.md Q3b): decide the canonical way to consume CNA from CMake.
-# CNA's library target is named `CNA` (a STATIC library, C++23). The three
-# candidate approaches are:
-#   * add_subdirectory("${EASY3D_CNA_DIR}" ...)  -> builds all of CNA + deps
-#   * find_package(CNA ...)                      -> needs CNA to export a config
-#   * an IMPORTED target pointing at a prebuilt libCNA.a
-# For now we use add_subdirectory when EASY3D_LINK_CNA is ON, and otherwise
-# leave linkage to the consuming application (e.g. galaxy-eggbert).
-if(EASY3D_LINK_CNA)
-    if(NOT TARGET CNA)
-        add_subdirectory("${EASY3D_CNA_DIR}" "${CMAKE_BINARY_DIR}/_cna")
-    endif()
-    target_link_libraries(easy3d PUBLIC CNA)
-endif()
+# Whether camera-running targets (example/tests that execute CNA math) can link.
+# Visible to the examples/ and tests/ subdirectories added below.
+set(EASY3D_CNA_LINKED ${_easy3d_have_cna_target})
 
 add_library(easy3d::easy3d ALIAS easy3d)
 

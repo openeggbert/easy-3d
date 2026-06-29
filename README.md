@@ -113,26 +113,56 @@ fine against the headers alone, but anything that actually *runs* camera math
 (e.g. `Camera3D::GetViewMatrix()`) must **link** the `CNA` library.
 
 Because building full CNA pulls in heavy dependencies (SHARP_RUNTIME, SDL3,
-ffmpeg, a graphics backend), the camera **example** and the camera **test** are
-opt-in:
+ffmpeg, a graphics backend), easy3d figures out CNA linkage in one of three
+ways:
 
-```sh
-cmake -S . -B build -DEASY3D_LINK_CNA=ON
+1. **A parent project already provides the `CNA` target** (a game that does
+   `add_subdirectory(../cna)` before `add_subdirectory(../easy-3d)`). easy3d
+   detects the existing `CNA` target and links it automatically — no option
+   needed. *This is the path games use* (see below).
+2. **Standalone, with `-DEASY3D_LINK_CNA=ON`.** easy3d builds CNA itself from
+   `EASY3D_CNA_DIR` (default `../cna`), selecting a graphics backend via
+   `EASY3D_CNA_BACKEND` (default `EASY_GL`) and disabling CNA's own demos/tests:
+
+   ```sh
+   cmake -S . -B build -DEASY3D_LINK_CNA=ON          # backend defaults to EASY_GL
+   cmake --build build
+   ctest --test-dir build                            # runs basics + camera tests
+   ```
+3. **Otherwise (default): headers only.** easy3d compiles against CNA's headers
+   and leaves linking to the consuming application. The default build stays light
+   and self-contained.
+
+When CNA is linked (case 1 or 2), easy3d defines `EASY3D_HAS_CNA_LINK` and the
+camera **example** and camera **test** are built.
+
+### Using Easy3D + CNA together in a game
+
+A game (e.g. Galaxy Eggbert) uses CNA directly *and* Easy3D for convenience.
+Pull both in as subdirectories — add CNA first, then Easy3D auto-links it:
+
+```cmake
+add_subdirectory(../cna       cna)        # defines the CNA target (+ chosen backend)
+add_subdirectory(../easy-3d   easy-3d)    # detects CNA, links it automatically
+
+add_executable(galaxy_eggbert src/main.cpp ...)
+target_link_libraries(galaxy_eggbert PRIVATE CNA easy3d)
+#                                            ^^^         the game still uses CNA directly
+#                                                ^^^^^^  and Easy3D helpers beside it
 ```
 
-> **TODO (open question):** confirm the preferred way to consume CNA from CMake
-> — `add_subdirectory(../cna)`, an installed/`find_package` config, or linking a
-> prebuilt `libCNA.a`. See [`docs/QUESTIONS.md`](docs/QUESTIONS.md). Until that
-> is decided, `EASY3D_LINK_CNA` defaults to **OFF** so the default build stays
-> light and self-contained.
+Because the game already selects CNA's backend and options, easy3d does not need
+`EASY3D_LINK_CNA` here — it simply links the `CNA` target the game created.
 
 ### CMake options
 
-| Option                  | Default | Meaning                                                        |
-| ----------------------- | ------- | -------------------------------------------------------------- |
-| `EASY3D_BUILD_EXAMPLES` | `ON`    | Build the `examples/` targets.                                 |
-| `EASY3D_BUILD_TESTS`    | `ON`    | Build the `tests/` targets and register them with CTest.       |
-| `EASY3D_LINK_CNA`       | `OFF`   | Link the compiled `CNA` library (enables camera example/test). |
+| Option                  | Default   | Meaning                                                                       |
+| ----------------------- | --------- | ----------------------------------------------------------------------------- |
+| `EASY3D_BUILD_EXAMPLES` | `ON`      | Build the `examples/` targets (camera example needs CNA linked).              |
+| `EASY3D_BUILD_TESTS`    | `ON`      | Build the `tests/` targets and register them with CTest.                      |
+| `EASY3D_LINK_CNA`       | `OFF`     | Standalone only: build CNA from `EASY3D_CNA_DIR` and link it.                  |
+| `EASY3D_CNA_DIR`        | `../cna`  | Path to the CNA repository.                                                    |
+| `EASY3D_CNA_BACKEND`    | `EASY_GL` | CNA backend to enable when easy3d builds CNA itself (`SDL_RENDERER`/`EASY_GL`/`BGFX`/`VULKAN`). |
 
 ---
 

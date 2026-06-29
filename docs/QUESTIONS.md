@@ -44,16 +44,22 @@ aliases / its own small POD types?
 
 ### 3b. How should Easy3D consume CNA from CMake?
 
-Three plausible options, not yet chosen:
+**Current implementation (works today):**
 
-* `add_subdirectory(../cna ...)` — simplest, but builds all of CNA and its deps.
-* An installed CNA + `find_package(CNA)` — cleanest, requires CNA to export a
-  package config.
-* Link a prebuilt `libCNA.a` via an `IMPORTED` target — lightest, but brittle
-  (must match compiler/flags/ABI).
+* If a parent project already defines the `CNA` target (a game that did
+  `add_subdirectory(../cna)`), easy3d **detects and links it automatically**.
+  This is the integration path for games using both CNA and Easy3D.
+* Standalone with `-DEASY3D_LINK_CNA=ON`, easy3d does
+  `add_subdirectory(${EASY3D_CNA_DIR})` itself — selecting a backend via
+  `EASY3D_CNA_BACKEND` (default `EASY_GL`) and turning off CNA's own
+  demos/tests. Verified to build and link the camera example + test.
+* Otherwise it stays headers-only.
 
-The scaffold currently leaves a clearly-marked TODO in `CMakeLists.txt` rather
-than guessing.
+**Still open (future refinement, not blocking):** should CNA additionally export
+an installed `find_package(CNA)` config, or should easy3d support linking a
+prebuilt `libCNA.a` via an `IMPORTED` target? The `add_subdirectory` path is the
+robust default because it gives correct transitive linking
+(SHARP_RUNTIME, backend, SDL3, ffmpeg) for free.
 
 ## 4. Header-only, or compiled library?
 

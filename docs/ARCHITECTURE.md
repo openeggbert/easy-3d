@@ -61,11 +61,22 @@ on both, and is free to call CNA directly whenever Easy3D does not help.
   *defined* in CNA's compiled `.cpp` files. Therefore:
   * The `easy3d` static library **compiles** against CNA headers alone.
   * Code that actually executes CNA math (e.g. `Camera3D::GetViewMatrix()`)
-    must **link** the `CNA` library at final link time. The consuming
-    application (e.g. Galaxy Eggbert) links both `easy3d` and `CNA`.
-* Easy3D does **not** depend on `sharp-runtime` directly, even though CNA does.
+    must **link** the `CNA` library at final link time.
+* Easy3D's CMake resolves CNA linkage three ways (see `README.md` and
+  `CMakeLists.txt`):
+  1. **Parent project provides the `CNA` target** → easy3d links it
+     automatically. This is how a game that uses both CNA and Easy3D wires
+     things up (`add_subdirectory(../cna)` then `add_subdirectory(../easy-3d)`,
+     then `target_link_libraries(game PRIVATE CNA easy3d)`).
+  2. **Standalone `-DEASY3D_LINK_CNA=ON`** → easy3d builds CNA itself from
+     `EASY3D_CNA_DIR` with a backend chosen by `EASY3D_CNA_BACKEND`.
+  3. **Default** → headers only; the consumer links CNA.
+  When CNA is linked, easy3d defines `EASY3D_HAS_CNA_LINK`.
+* Easy3D does **not** depend on `sharp-runtime` directly, even though CNA does
+  (it comes in transitively when CNA is linked).
 
-See [`QUESTIONS.md`](QUESTIONS.md) for the open CMake-integration decisions.
+See [`QUESTIONS.md`](QUESTIONS.md) for the remaining (non-blocking) CMake
+packaging questions.
 
 ## What Easy3D is deliberately NOT
 
