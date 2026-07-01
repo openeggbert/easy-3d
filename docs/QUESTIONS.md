@@ -4,7 +4,7 @@ Questions for the user. Future automated sessions must **not** silently decide
 these — ask first. Each item notes what was already learned by inspecting
 `../cna`.
 
-## 1. CNA math types directly, or tiny Easy3D aliases?
+## 1. CNA math types directly, or tiny Easy3D aliases? — DECIDED (2026-07-01)
 
 Should Easy3D use CNA math types directly in its API and storage, or define tiny
 aliases / its own small POD types?
@@ -19,18 +19,20 @@ aliases / its own small POD types?
 > `UvRect`) because pixel/UV rectangles are not really CNA concepts; this also
 > keeps it CNA-free and unit-testable on its own.
 >
-> **Decision needed:** keep using CNA types directly everywhere (current
-> assumption), or introduce `Easy3D::Vector3 = Microsoft::Xna::Framework::Vector3`
-> style aliases for brevity?
+> **Decision:** keep using CNA types directly everywhere (no new aliases). No
+> code change required — matches the current camera helpers.
 
-## 2. Exact CNA CMake target name?
+## 2. Exact CNA CMake target name? — DECIDED (2026-07-01)
 
 > **Finding (resolved):** CNA's library target is **`CNA`** — a `STATIC` library
 > built with C++23, whose `PUBLIC` include directory is `../cna/include`. It
 > links `SHARP_RUNTIME`, a graphics backend target, and (privately) SDL3 /
-> ffmpeg. Please confirm `CNA` is the intended stable, public target name.
+> ffmpeg.
+>
+> **Decision:** confirmed — `CNA` is the stable, public target name Easy3D can
+> rely on.
 
-## 3. Should examples link CNA now, or stay documentation-only?
+## 3. Should examples link CNA now, or stay documentation-only? — DECIDED (2026-07-01)
 
 > **Finding / current choice:** CNA math is implemented out-of-line, and linking
 > CNA pulls in heavy transitive dependencies (SHARP_RUNTIME, SDL3, ffmpeg, a
@@ -39,10 +41,10 @@ aliases / its own small POD types?
 > `EASY3D_LINK_CNA` (default **OFF**). The default build produces the `easy3d`
 > library plus a CNA-free test.
 >
-> **Decision needed:** is "opt-in CNA linkage" acceptable, or should examples
-> link CNA by default? And *how* should CNA be linked (see Q below)?
+> **Decision:** keep opt-in CNA linkage (`EASY3D_LINK_CNA` default `OFF`). No
+> code change required.
 
-### 3b. How should Easy3D consume CNA from CMake?
+### 3b. How should Easy3D consume CNA from CMake? — DECIDED (2026-07-01)
 
 **Current implementation (works today):**
 
@@ -55,31 +57,39 @@ aliases / its own small POD types?
   demos/tests. Verified to build and link the camera example + test.
 * Otherwise it stays headers-only.
 
-**Still open (future refinement, not blocking):** should CNA additionally export
-an installed `find_package(CNA)` config, or should easy3d support linking a
-prebuilt `libCNA.a` via an `IMPORTED` target? The `add_subdirectory` path is the
-robust default because it gives correct transitive linking
-(SHARP_RUNTIME, backend, SDL3, ffmpeg) for free.
+**Decision:** the current `add_subdirectory` + parent-target-detection approach
+is sufficient; no `find_package(CNA)` config or `IMPORTED`/prebuilt-`libCNA.a`
+path is needed for now. Revisit only if a concrete consumer needs it.
 
-## 4. Header-only, or compiled library?
+## 4. Header-only, or compiled library? — DECIDED (2026-07-01)
 
 Should the simple helpers be header-only, or a normal compiled library?
 
-> **Current choice:** a normal compiled `STATIC` library (`easy3d`). Open to
-> switching simple helpers to header-only if preferred.
+> **Current choice:** a normal compiled `STATIC` library (`easy3d`).
+>
+> **Decision:** keep it a compiled `STATIC` library. No code change required.
 
-## 5. Lua as a separate `easy3d-lua` module, or completely outside this repo?
+## 5. Lua as a separate `easy3d-lua` module, or completely outside this repo? — DECIDED (2026-07-01, discussion only)
 
 Lua is **not** part of this version. If it ever happens, should it be an
 optional separate module within this repo (e.g. `easy3d-lua`), or live entirely
 outside Easy3D? No implementation until explicitly approved.
 
-## 6. 3D models eventually, or billboard/cube/tile only?
+> **Decision (for if/when Lua is ever approved):** it would be an optional,
+> separate module within this repo, working name `easy3d-lua`. This is a
+> discussion-only answer — Lua itself remains out of scope and unimplemented
+> until separately, explicitly approved (see `docs/ROADMAP.md` Phase 4).
+
+## 6. 3D models eventually, or billboard/cube/tile only? — DECIDED (2026-07-01)
 
 For the first Galaxy Eggbert versions, should Easy3D support 3D models at all,
 or stay strictly billboard / cube / tile helpers?
 
-## 7. How should Galaxy Eggbert render Blupi initially?
+> **Decision:** billboard / cube / tile only for the first Galaxy Eggbert
+> versions. No 3D model loading/import — that stays a hard limit
+> (`docs/ROADMAP.md`) unless separately, explicitly approved later.
+
+## 7. How should Galaxy Eggbert render Blupi initially? — DECIDED (2026-07-01)
 
 * (a) invisible debug capsule,
 * (b) 2D billboard built from existing Mobile Eggbert sprites, or
@@ -87,3 +97,7 @@ or stay strictly billboard / cube / tile helpers?
 
 This affects whether `BillboardBatch` + `TextureAtlas` are enough for the first
 playable version (likely option **b**), or whether more is needed sooner.
+
+> **Decision:** option **(b)** — a 2D billboard built from existing Mobile
+> Eggbert sprite animations. `BillboardBatch` + `TextureAtlas` are the two
+> Easy3D pieces this needs; per Q6, no 3D model path is needed for this.

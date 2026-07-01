@@ -17,9 +17,10 @@ Reflects the repository state as of the last commit on branch `develop`
   batching, texture atlas, debug draw) so small 3D projects can be built against
   CNA without re-inventing glue. First concrete consumer is **Galaxy Eggbert**
   (a 3D remake of Mobile Eggbert / Speedy Blupi).
-* **Current phase:** **Phase 0 (scaffold) complete + start of Phase 1 (camera
-  helpers).** Camera helpers are implemented and tested; rendering helpers are
-  intentional stubs. See `docs/ROADMAP.md`.
+* **Current phase:** **Phase 0/1 complete, start of Phase 2 (basic rendering
+  helpers).** Camera helpers are implemented and tested. `BillboardBatch` now
+  has a real (still non-rendering) item-storage interface; `CubeBatch` and
+  `DebugDraw` are still pure item-counting stubs. See `docs/ROADMAP.md`.
 * **Key architectural decisions:**
   * Easy3D depends on CNA; nothing in CNA depends on Easy3D.
   * CNA math types (`Vector3`, `Matrix`) are declared in headers but **defined in
@@ -33,7 +34,10 @@ Reflects the repository state as of the last commit on branch `develop`
 
 * **Build status:** ✅ Working.
   * Default (`cmake -S . -B build`): builds `libeasy3d.a` + the CNA-free
-    `basics` test. No CNA build required.
+    `basics` test, plus compile-only checks of `test_camera.cpp`/`main.cpp`
+    (`easy3d_test_camera_compilecheck`, `easy3d_minimal_compilecheck` — never
+    linked, so they don't need CNA; they exist to catch CNA header/API drift
+    even in this build). No CNA build required.
   * CNA-linked (`-DEASY3D_LINK_CNA=ON`, backend `EASY_GL`): verified — builds
     SHARP_RUNTIME + easygl backend + CNA + easy3d + camera example + camera test.
 * **Test status:** ✅
@@ -44,17 +48,25 @@ Reflects the repository state as of the last commit on branch `develop`
   * **Implemented:** `Easy3D::Camera3D`, `Easy3D::OrbitCamera`,
     `Easy3D::FollowCamera` (real CNA view/projection math), `Easy3D::TextureAtlas`
     (CNA-free, named pixel rects → normalized UVs), `Easy3D::Version*`.
-  * **Stubs only (no rendering):** `Easy3D::BillboardBatch`, `Easy3D::CubeBatch`,
-    `Easy3D::DebugDraw` — they only count queued items via `Add`/`Line`/`Box`.
+  * **Non-rendering item storage:** `Easy3D::BillboardBatch` — `Add(position,
+    size, uv)` stores a `BillboardItem{Position, Size, Uv}` per call; `Items()`
+    exposes the queued list (`std::vector<BillboardItem>`). `Easy3D::CubeBatch`
+    — `Add(center, size)` stores a `CubeItem{Center, Size}` per call, same
+    `Items()` pattern. Both still do no GPU work.
+  * **Stub only (no item storage yet):** `Easy3D::DebugDraw` — only counts
+    queued primitives via `Line`/`Box`.
   * Example: `examples/minimal/main.cpp` (builds/runs only when CNA is linked).
     Observed output: `Easy3D 0.1.0` / `camera eye: (6.47308, 3.54624, 9.46168)` /
     `atlas regions: 1, blupi_idle_0 UV0: (0, 0)`.
 * **What does NOT work yet:**
-  * No actual GPU rendering anywhere — batches and DebugDraw do not draw.
+  * No actual GPU rendering anywhere — `BillboardBatch`/`CubeBatch` only store
+    items; `DebugDraw` only counts them. Nothing draws yet.
   * `TextureAtlas::GetUv` returns `(0,0,...)` if atlas size is unset/0 (by design),
     which is why the example prints UV0 `(0, 0)` — see Known bugs/limitations.
-  * No `find_package(CNA)` / installed-package path; no prebuilt-lib import path.
-  * No HUD/2D helpers, no model loading, no Lua (intentionally out of scope).
+  * No `find_package(CNA)` / installed-package path; no prebuilt-lib import path
+    (decided not needed for now — see `docs/QUESTIONS.md` Q3b).
+  * No HUD/2D helpers, no model loading, no Lua (intentionally out of scope —
+    see `docs/QUESTIONS.md` Q5/Q6, both decided 2026-07-01).
 
 ## 3. Recent changes
 
@@ -75,25 +87,38 @@ Reflects the repository state as of the last commit on branch `develop`
   `QUESTIONS`.
 * **Tests added:** `test_basics` (Version + TextureAtlas, CNA-free) and
   `test_camera` (Camera3D/OrbitCamera/FollowCamera defaults + math, needs CNA).
+* **TextureAtlas edge case, FollowCamera constant, compile-check targets, Q&A,
+  BillboardBatch/CubeBatch design (this session, 2026-07-01):** see §8 items
+  1–6 for full detail. Summary: added an unset-atlas-size `GetUv` test; named
+  and documented the `FollowCamera` smoothing reference-fps constant + added
+  convergence/frame-rate-independence tests; added `OBJECT`-library
+  compile-only checks for `test_camera.cpp`/`main.cpp` in the default
+  (no-CNA-link) build; recorded decisions for all 7 `docs/QUESTIONS.md` items;
+  turned `BillboardBatch` and `CubeBatch` into real (still non-rendering)
+  `Add(...)` → `Items()` interfaces.
 
 ## 4. Current blocker / main problem
 
 **There is no failing build or test — nothing is currently blocked.**
 
-The honest "main problem" is a **scope/decision gate, not a bug**: the rendering
-helpers (`BillboardBatch`, `CubeBatch`, `DebugDraw`) are stubs, and turning them
-into real rendering requires a CNA draw-path decision that has **not** been made
-yet. The relevant open questions are in `docs/QUESTIONS.md` (esp. Q6/Q7: models
-vs billboards/cubes; how Blupi is first rendered) and Q3b (packaging of CNA).
+All `docs/QUESTIONS.md` items are now **DECIDED** (2026-07-01, see §8 item 4):
+Blupi will render as a 2D billboard from Mobile Eggbert sprites (Q7), and
+Easy3D stays billboard/cube/tile-only, no 3D models (Q6). The scope/decision
+gate that used to block rendering work is gone; the rendering helpers
+(`BillboardBatch`, `CubeBatch`, `DebugDraw`) are still stubs, but the next step
+(§8 item 5) is now a design task, not a "waiting on the user" gate. A CNA
+draw-path decision (how to actually issue GPU draw calls) is still needed
+before real rendering, but that's implementation detail for later, not an open
+question blocking the next small step.
 
-If something must be called the next step rather than a blocker: pick the first
-task in §8.
+Pick the first unstruck task in §8.
 
 * Exact symptom: n/a (no failure).
 * Failing command: n/a.
 * Failing test: n/a.
-* Affected files for the next step: `src/BillboardBatch.cpp`, `src/CubeBatch.cpp`,
-  `src/DebugDraw.cpp`, and their headers.
+* Affected files for the next step: `src/DebugDraw.cpp` and its header
+  (`BillboardBatch`/`CubeBatch` already have real item-storage interfaces as of
+  §8 items 5–6).
 * Suspected cause: features simply not implemented yet (by design — Phase 2/3).
 * Already tried: full default + CNA-linked builds and both test suites — all green.
 
@@ -106,15 +131,16 @@ task in §8.
   yet prints `UV0 (0, 0)` — that is correct here only because the region origin is
   `(0,0)`; confirm UVs are right for a non-zero-origin region (the `basics` test
   already checks `{10,20,30,40}` → `(0.10,0.10,0.40,0.30)` and passes).
-* **limitation:** `FollowCamera::Update` smoothing is frame-rate-corrected against
-  a hard-coded 60 fps assumption (`deltaSeconds * 60`). Documented, but a magic
-  constant.
+* ~~**limitation:** `FollowCamera::Update` smoothing magic constant.~~ **Resolved**
+  (see §8 item 2): the `60.0f` is now the named, documented constant
+  `kSmoothingReferenceFps` in `src/FollowCamera.cpp`; it is intentionally fixed
+  (not a tunable) since it defines what a given `SetSmoothing()` value means.
 * **limitation/unknown:** only the `EASY_GL` CNA backend has been built/verified
   from easy-3d; `SDL_RENDERER`, `BGFX`, `VULKAN` are wired in CMake but untested
   here (BGFX uses `FetchContent` → needs network).
-* **limitation:** no `find_package(CNA)` / installed-package or prebuilt-lib
-  consumption path (Q3b open). Only `add_subdirectory` and parent-target paths
-  exist.
+* **limitation (accepted, not a gap):** no `find_package(CNA)` / installed-package
+  or prebuilt-lib consumption path. Only `add_subdirectory` and parent-target
+  paths exist — per Q3b (decided 2026-07-01), this is sufficient for now.
 * **risky assumption:** `Camera3D::Vector3`/`Matrix` are exposed as `using`
   aliases to the CNA types. This is deliberate (does not hide CNA) but means the
   public API is tied to CNA's exact type names.
@@ -178,33 +204,124 @@ c++ -std=c++23 -Iinclude -I../cna/include -c examples/minimal/main.cpp -o /tmp/m
 
 ## 8. Next smallest tasks (ordered)
 
-1. **Add a TextureAtlas edge-case test for unset atlas size.**
-   * Goal: lock in the documented behavior that `GetUv` returns `{0,0,0,0}` when
-     atlas size ≤ 0, and that a non-zero-origin region gives correct UVs.
-   * Files: `tests/test_basics.cpp` (only).
-   * Verify: `cmake --build build -j && ctest --test-dir build --output-on-failure`.
-2. **Decide & document FollowCamera smoothing semantics (remove the 60-fps magic
-   constant or justify it in code).**
-   * Goal: make smoothing framerate-independent without an unexplained `*60`.
-   * Files: `src/FollowCamera.cpp`, `include/Easy3D/FollowCamera.hpp`,
-     `tests/test_camera.cpp` (add a 2-step convergence assertion).
-   * Verify: `ctest --test-dir build-cna --output-on-failure` (needs CNA link).
-3. **CI-friendly compile-check target for camera code without linking CNA.**
-   * Goal: catch CNA-API drift cheaply; add an `OBJECT`-library or compile-only
-     custom target so `test_camera.cpp`/`main.cpp` are compiled even in the
-     default (no-CNA-link) build.
-   * Files: `CMakeLists.txt`, `tests/CMakeLists.txt`, `examples/minimal/CMakeLists.txt`.
-   * Verify: `cmake -S . -B build && cmake --build build -j` (no CNA link).
-4. **Write `docs/QUESTIONS.md` answers as a short decision once the user replies
-   to Q6/Q7**, then start Phase 2 `BillboardBatch` design (interface only, still
-   no GPU).
-   * Files: `docs/QUESTIONS.md`, `include/Easy3D/BillboardBatch.hpp`.
-   * Verify: builds unchanged; no behavior change yet.
+1. ~~**Add a TextureAtlas edge-case test for unset atlas size.**~~ **Done.**
+   Added a case in `tests/test_basics.cpp`: a fresh `TextureAtlas` with no
+   `SetAtlasSize` call, given a non-zero-origin region (`{10,20,30,40}`), now
+   asserts `GetUv` returns `{0,0,0,0}`. The existing non-zero-origin-with-set-size
+   case (`{10,20,30,40}` → `(0.10,0.10,0.40,0.30)`) already covered the "correct
+   UVs" half. Verified: default build + `ctest` → 1/1 (`basics`) pass.
+2. ~~**Decide & document FollowCamera smoothing semantics.**~~ **Done.** Kept the
+   `*60` (justify-in-code branch, not remove — the math was already
+   frame-rate-independent; only the constant was unexplained). Changes:
+   * `src/FollowCamera.cpp`: named the constant `kSmoothingReferenceFps` in an
+     anonymous namespace, with a comment explaining it is an arbitrary but
+     fixed reference (60 fps, kept for continuity with existing `SetSmoothing()`
+     call sites) and the exponential-decay derivation.
+   * `include/Easy3D/FollowCamera.hpp`: expanded the `GetSmoothing`/`SetSmoothing`
+     doc comment to state the "fraction of gap closed per 1/60s" semantics
+     explicitly.
+   * `tests/test_camera.cpp`: added a 2-step monotonic convergence check, plus a
+     frame-rate-independence check (`Update(dt=2/60)` once == `Update(dt=1/60)`
+     twice), which is the property the reference-fps design actually buys.
+   * Verified: `ctest --test-dir build-cna --output-on-failure` → 2/2 pass;
+     default (no-CNA) build also rebuilt clean → 1/1 pass (no regression).
+3. ~~**CI-friendly compile-check target for camera code without linking CNA.**~~
+   **Done.** `test_camera.cpp`/`main.cpp` only need CNA's *headers* to compile
+   (the math types are declared in headers, defined in CNA's `.cpp`s); only
+   *running* them needs CNA linked. Added `OBJECT` library targets
+   (`easy3d_test_camera_compilecheck`, `easy3d_minimal_compilecheck`) in the
+   `else()` branches of `tests/CMakeLists.txt` /
+   `examples/minimal/CMakeLists.txt` — built by default (part of `all`, not
+   `EXCLUDE_FROM_ALL`), never linked into an executable, so no undefined-symbol
+   errors. `CMakeLists.txt` itself needed no changes (`EASY3D_CNA_LINKED` /
+   `EASY3D_CNA_INCLUDE_DIR` already existed and are sufficient).
+   * Verified: fresh `cmake -S . -B build && cmake --build build -j` (no CNA
+     link) now compiles `easy3d_test_camera_compilecheck` and
+     `easy3d_minimal_compilecheck` alongside `easy3d_test_basics`; `ctest` → 1/1
+     pass. Fresh CNA-linked reconfigure+rebuild (`-DEASY3D_LINK_CNA=ON`) still
+     takes the executable/test path unchanged; `ctest` → 2/2 pass (no
+     regression).
+4. ~~**Write `docs/QUESTIONS.md` answers**~~ **Done (2026-07-01).** All 7
+   open questions answered by the user and recorded as short "DECIDED" notes in
+   `docs/QUESTIONS.md`:
+   * Q1: keep using CNA types directly (no Easy3D aliases).
+   * Q2: `CNA` confirmed as the stable CMake target name.
+   * Q3 / Q3b: keep opt-in CNA linkage (`EASY3D_LINK_CNA` default OFF); current
+     `add_subdirectory` + parent-target-detection consumption is sufficient,
+     no `find_package(CNA)`/prebuilt-import path needed now.
+   * Q4: keep `easy3d` a compiled `STATIC` library (not header-only).
+   * Q5 (discussion only): if Lua is ever approved, it'd be a separate
+     `easy3d-lua` module in this repo — still unimplemented/out of scope.
+   * Q6: billboard/cube/tile only for first Galaxy Eggbert versions, no 3D
+     model support.
+   * Q7: Blupi renders initially as **(b) a 2D billboard** from existing Mobile
+     Eggbert sprite animations.
+   * None of these required code changes — all confirm current scaffold
+     choices, except Q6/Q7 which now unblock Phase 2 `BillboardBatch` design.
+   * Verify: n/a (docs-only change).
+
+5. ~~**Start Phase 2 `BillboardBatch` design (interface only, still no GPU).**~~
+   **Done (2026-07-01).** `BillboardBatch` is now a real (still non-rendering)
+   item-storage interface:
+   * Added `Easy3D::BillboardItem` (POD: CNA `Vector3 Position`, CNA `Vector2
+     Size`, Easy3D `UvRect Uv`) in `include/Easy3D/BillboardBatch.hpp`
+     (now includes `TextureAtlas.hpp` for `UvRect`).
+   * `BillboardBatch::Add(worldPosition, size, uv)` — signature grew a
+     required `const UvRect&` third parameter (was position+size only); stores
+     one `BillboardItem` per call in a `std::vector`.
+   * Added `BillboardBatch::Items()` (`const std::vector<BillboardItem>&`)
+     exposing the queue in `Add()` order — the intended consumption point for
+     a future CNA draw path.
+   * `Begin()` now clears the vector (was resetting an int counter); `Count()`
+     is now `m_items.size()` (no separate counter member).
+   * `src/BillboardBatch.cpp` shrank to one line: `m_items.push_back(...)` (the
+     `TODO` comment is gone — the thing it deferred is done).
+   * Tests: added a `BillboardBatch` section to `tests/test_camera.cpp` (needs
+     CNA link — constructing `Vector3(x,y,z)`/`Vector2(x,y)` values calls CNA's
+     compiled constructors) covering `Add`×2 → `Count()`/`Items()` contents →
+     `Begin()` clears both.
+   * `examples/minimal/main.cpp` intentionally untouched (doesn't call
+     `BillboardBatch`; no update needed).
+   * Verified: default (no-CNA-link) build — `easy3d` + `easy3d_test_camera_compilecheck`
+     (now also compile-checking the `BillboardBatch` calls) + `ctest` → 1/1
+     pass. CNA-linked rebuild — `ctest` → 2/2 pass (no regression).
+
+6. ~~**Apply the same item-storage treatment to `CubeBatch`.**~~ **Done
+   (2026-07-01).** Mirrors item 5 exactly:
+   * `include/Easy3D/CubeBatch.hpp`: added `CubeItem{Center, Size}` (both CNA
+     `Vector3`); `Add(center, size)` now stores one `CubeItem` per call in a
+     `std::vector`; added `Items()`; `Begin()` clears the vector, `Count()`
+     reads its size (same shape as `BillboardBatch`, no `UvRect` needed here).
+   * `src/CubeBatch.cpp`: shrank to one line, `m_items.push_back(...)`.
+   * Tests: added a `CubeBatch` section to `tests/test_camera.cpp` (same
+     CNA-link reasoning as item 5) — `Add`×2 → `Count()`/`Items()` contents →
+     `Begin()` clears both.
+   * `DebugDraw` intentionally left as a pure counter (no immediate Galaxy
+     Eggbert consumer; lower priority — see the next task).
+   * Verified: default (no-CNA-link) build — `easy3d` +
+     `easy3d_test_camera_compilecheck` (now also compile-checking the
+     `CubeBatch` calls) + `ctest` → 1/1 pass. CNA-linked rebuild — `ctest` →
+     2/2 pass (no regression).
+
+7. **Apply the same item-storage treatment to `DebugDraw` — or decide it's not
+   worth it yet.**
+   * Goal: either add `LineItem{From, To}` / `BoxItem{Center, Size}` storage
+     (mirroring items 5–6), or explicitly decide `DebugDraw` stays a pure
+     counter until a concrete debug-overlay consumer exists (it has none yet
+     — no Galaxy Eggbert dependency drives this the way Q7's billboard answer
+     drove `BillboardBatch`/`CubeBatch`). Worth asking the user which, since
+     unlike items 5/6 there's no roadmap/QUESTIONS.md answer already pointing
+     at "yes, do this now".
+   * Files (if implemented): `include/Easy3D/DebugDraw.hpp`,
+     `src/DebugDraw.cpp`, `tests/test_camera.cpp`.
+   * Verify: default build + `ctest` (1/1) and CNA-linked build + `ctest` (2/2).
 
 ## 9. Do not do yet
 
-* **No rendering implementation** in `BillboardBatch`/`CubeBatch`/`DebugDraw`
-  until the CNA draw-path / Q6–Q7 decisions are made.
+* **No GPU rendering implementation** in `BillboardBatch`/`CubeBatch`/`DebugDraw`
+  until a CNA draw-path decision is made (Q6/Q7 *scope* is decided — billboard
+  from Mobile Eggbert sprites, no 3D models — but *how draw calls are issued*
+  is a separate, still-open implementation decision).
 * **No refactor of CNA** and **no edits** to `../cna`, `../sharp-runtime`,
   `../mobile-eggbert`, `../galaxy-eggbert`. **No reading/copying** `../simple-3d`.
 * **No new subsystems**: no ECS, physics, navigation, networking, editor, asset

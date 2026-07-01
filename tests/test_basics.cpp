@@ -52,6 +52,17 @@ int main()
     CHECK(approx(uv.U1, 0.40f)); // (10 + 30) / 100
     CHECK(approx(uv.V1, 0.30f)); // (20 + 40) / 200
 
+    // --- GetUv with unset atlas size returns a zero UvRect --------------
+    // Locks in the documented behavior: GetUv returns {0,0,0,0} when the
+    // atlas size is <= 0, even for a region with a non-zero origin.
+    Easy3D::TextureAtlas unsized;
+    unsized.Add("b", Easy3D::AtlasRect{10, 20, 30, 40});
+    const Easy3D::UvRect zeroUv = unsized.GetUv("b");
+    CHECK(approx(zeroUv.U0, 0.0f));
+    CHECK(approx(zeroUv.V0, 0.0f));
+    CHECK(approx(zeroUv.U1, 0.0f));
+    CHECK(approx(zeroUv.V1, 0.0f));
+
     // --- Unknown region throws -----------------------------------------
     bool threw = false;
     try {
