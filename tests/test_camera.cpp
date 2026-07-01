@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 //
-// Basic construction / defaults for the camera helpers.
-// Requires linking CNA (-DEASY3D_LINK_CNA=ON) because it exercises CNA math.
+// Basic construction / defaults for the camera helpers (Camera3D, OrbitCamera,
+// FollowCamera). Requires linking CNA (-DEASY3D_LINK_CNA=ON) because it
+// exercises CNA math. BillboardBatch/CubeBatch/DebugDraw tests live in
+// test_batches.cpp.
 
 #include "Easy3D/Camera3D.hpp"
 #include "Easy3D/OrbitCamera.hpp"
 #include "Easy3D/FollowCamera.hpp"
-#include "Easy3D/BillboardBatch.hpp"
-#include "Easy3D/CubeBatch.hpp"
-#include "Easy3D/DebugDraw.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -92,65 +91,6 @@ int main()
     bigStep.SetSmoothing(0.15f);
     bigStep.Update(target, 2.0f / 60.0f);
     CHECK(approx(bigStep.GetPosition().X, afterStep2));
-
-    // --- BillboardBatch: queues items, exposes them, Begin() clears --------
-    Easy3D::BillboardBatch batch;
-    CHECK(batch.Count() == 0);
-
-    const Easy3D::UvRect uvA{0.0f, 0.0f, 0.5f, 1.0f};
-    const Easy3D::UvRect uvB{0.5f, 0.0f, 1.0f, 1.0f};
-    batch.Add(Vector3(1.0f, 2.0f, 3.0f), Easy3D::BillboardBatch::Vector2(4.0f, 5.0f), uvA);
-    batch.Add(Vector3(6.0f, 7.0f, 8.0f), Easy3D::BillboardBatch::Vector2(9.0f, 10.0f), uvB);
-    CHECK(batch.Count() == 2);
-
-    const auto& items = batch.Items();
-    CHECK(items.size() == 2);
-    CHECK(approx(items[0].Position.X, 1.0f) && approx(items[0].Position.Y, 2.0f) && approx(items[0].Position.Z, 3.0f));
-    CHECK(approx(items[0].Size.X, 4.0f) && approx(items[0].Size.Y, 5.0f));
-    CHECK(approx(items[0].Uv.U0, 0.0f) && approx(items[0].Uv.U1, 0.5f));
-    CHECK(approx(items[1].Position.X, 6.0f));
-    CHECK(approx(items[1].Uv.U0, 0.5f) && approx(items[1].Uv.U1, 1.0f));
-
-    batch.Begin();
-    CHECK(batch.Count() == 0);
-    CHECK(batch.Items().empty());
-
-    // --- CubeBatch: queues items, exposes them, Begin() clears -------------
-    Easy3D::CubeBatch cubes;
-    CHECK(cubes.Count() == 0);
-
-    cubes.Add(Vector3(1.0f, 2.0f, 3.0f), Vector3(1.0f, 1.0f, 1.0f));
-    cubes.Add(Vector3(4.0f, 5.0f, 6.0f), Vector3(2.0f, 2.0f, 2.0f));
-    CHECK(cubes.Count() == 2);
-
-    const auto& cubeItems = cubes.Items();
-    CHECK(cubeItems.size() == 2);
-    CHECK(approx(cubeItems[0].Center.X, 1.0f) && approx(cubeItems[0].Center.Y, 2.0f) && approx(cubeItems[0].Center.Z, 3.0f));
-    CHECK(approx(cubeItems[0].Size.X, 1.0f));
-    CHECK(approx(cubeItems[1].Center.X, 4.0f));
-    CHECK(approx(cubeItems[1].Size.X, 2.0f));
-
-    cubes.Begin();
-    CHECK(cubes.Count() == 0);
-    CHECK(cubes.Items().empty());
-
-    // --- DebugDraw: queues lines/boxes, exposes them, Clear() clears -------
-    Easy3D::DebugDraw debug;
-    CHECK(debug.PrimitiveCount() == 0);
-
-    debug.Line(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f));
-    debug.Box(Vector3(2.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f));
-    CHECK(debug.PrimitiveCount() == 2);
-
-    const auto& lines = debug.Lines();
-    const auto& boxes = debug.Boxes();
-    CHECK(lines.size() == 1 && boxes.size() == 1);
-    CHECK(approx(lines[0].From.X, 0.0f) && approx(lines[0].To.X, 1.0f));
-    CHECK(approx(boxes[0].Center.X, 2.0f) && approx(boxes[0].Size.X, 1.0f));
-
-    debug.Clear();
-    CHECK(debug.PrimitiveCount() == 0);
-    CHECK(debug.Lines().empty() && debug.Boxes().empty());
 
     if (g_failures == 0) {
         std::printf("easy3d camera test: OK\n");

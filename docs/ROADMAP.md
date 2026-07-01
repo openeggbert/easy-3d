@@ -4,7 +4,7 @@ This roadmap is intentionally **conservative**. Easy3D grows only as far as
 Galaxy Eggbert actually needs it. If a feature is not needed soon, it is not
 built. Anything not listed here is out of scope until explicitly approved.
 
-## Phase 0 — Scaffold *(current)*
+## Phase 0 — Scaffold *(done)*
 
 * Build system (CMake, C++23, `easy3d` static library target).
 * Documentation (`README.md`, `docs/ARCHITECTURE.md`, this file,
@@ -12,20 +12,39 @@ built. Anything not listed here is out of scope until explicitly approved.
 * Empty / minimal helper classes (compilable stubs).
 * A minimal, self-contained test.
 
-## Phase 1 — Camera helpers
+## Phase 1 — Camera helpers *(done)*
 
 * `Easy3D::Camera3D` — position/target/up + FOV/aspect/near/far, producing CNA
   view and projection `Matrix` values.
 * `Easy3D::OrbitCamera` — target + yaw/pitch/distance orbit camera.
 * `Easy3D::FollowCamera` — smoothed follow camera (target + offset + smoothing).
 
-## Phase 2 — Basic rendering helpers
+## Phase 2 — Data-side batching and atlas helpers *(done)*
 
-* `Easy3D::BillboardBatch` — batch of camera-facing quads.
-* `Easy3D::CubeBatch` — batch of cubes / tiles.
-* `Easy3D::TextureAtlas` — named sub-rectangles + UV lookup.
+Non-rendering, CPU-side data storage — no GPU work, no draw calls.
 
-## Phase 3 — Galaxy Eggbert support
+* `Easy3D::TextureAtlas` — named sub-rectangles + UV lookup, plus
+  `AddGrid` (spritesheet grid insertion) and `GetUvOrDefault` (non-throwing
+  lookup).
+* `Easy3D::BillboardBatch` — queues `BillboardItem` (position, size, UV,
+  origin, rotation) for camera-facing quads.
+* `Easy3D::CubeBatch` — queues `CubeItem` (center, size, UV) for cubes / tiles.
+* `Easy3D::DebugDraw` — queues `DebugLine` / `DebugBox` for development
+  overlays.
+
+## Phase 3 — CPU-side vertex builders
+
+* Turn queued `BillboardItem`/`CubeItem`/`DebugLine`/`DebugBox` data into
+  vertex/index buffers (CPU-side geometry only) — still no GPU calls, no
+  `GraphicsDevice`, no shaders.
+
+## Phase 4 — CNA renderer adapters
+
+* Consume the Phase 3 vertex/index data and actually issue CNA draw calls
+  (`GraphicsDevice`, `BasicEffect`/`SpriteBatch`, vertex/index buffers). This
+  is the first phase that requires a concrete CNA draw-path decision.
+
+## Phase 5 — Galaxy Eggbert support
 
 * Render Blupi as a **billboard** using existing Mobile Eggbert animation
   frames.
@@ -35,7 +54,7 @@ built. Anything not listed here is out of scope until explicitly approved.
   billboard/cube/atlas/debug helpers only; the meaning of tiles, animation
   tables, and gameplay live in Galaxy Eggbert.
 
-## Phase 4 — Optional future (no implementation yet)
+## Phase 6 — Optional future (no implementation yet)
 
 * **Lua: discussion only.** Lua is currently *undecided* and intentionally out
   of scope. If it ever happens it would be an optional, separate module

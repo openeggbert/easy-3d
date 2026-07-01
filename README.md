@@ -36,6 +36,18 @@ If you find yourself building any of the above, it does **not** belong in Easy3D
 
 ---
 
+## Current status
+
+* Cameras exist (`Camera3D`, `OrbitCamera`, `FollowCamera`).
+* `TextureAtlas` supports named rects and grid spritesheet insertion
+  (`AddGrid`), plus a non-throwing lookup (`GetUvOrDefault`).
+* `BillboardBatch`, `CubeBatch`, and `DebugDraw` store queued data
+  (`BillboardItem`/`CubeItem`/`DebugLine`+`DebugBox`) for later use.
+* Rendering (issuing actual CNA draw calls) is **intentionally not implemented
+  yet** — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+---
+
 ## Relationship to CNA
 
 ```text

@@ -54,7 +54,25 @@ namespace Easy3D
         /// @brief Register (or overwrite) a named region.
         void Add(std::string name, const AtlasRect& rect);
 
-        [[nodiscard]] bool Contains(std::string_view name) const;
+        /// @brief Register a grid of named regions from a spritesheet, e.g.
+        /// `prefix + "_0"`, `prefix + "_1"`, ... in row-major order (first row
+        /// left to right, then the next row).
+        ///
+        /// Frame @c i sits at pixel `(startX + col*(frameWidth+spacingX),
+        /// startY + row*(frameHeight+spacingY))` with size `frameWidth x
+        /// frameHeight`, where `col = i % columns`, `row = i / columns`.
+        /// Internally calls `Add()` for each frame, so it shares `Add()`'s
+        /// overwrite-on-duplicate-name behavior.
+        /// @throws std::invalid_argument if @p prefix is empty, @p frameWidth,
+        ///         @p frameHeight, @p columns, or @p rows is <= 0, or
+        ///         @p startX/@p startY/@p spacingX/@p spacingY is negative.
+        void AddGrid(std::string_view prefix,
+                     int frameWidth, int frameHeight,
+                     int columns, int rows,
+                     int startX = 0, int startY = 0,
+                     int spacingX = 0, int spacingY = 0);
+
+        [[nodiscard]] bool Contains(std::string_view name) const noexcept;
 
         /// @brief Look up a region by name.
         /// @throws std::out_of_range if @p name is unknown.
@@ -64,7 +82,13 @@ namespace Easy3D
         /// @throws std::out_of_range if @p name is unknown.
         [[nodiscard]] UvRect GetUv(std::string_view name) const;
 
+        /// @brief Normalized UVs for a region, or @p fallback if @p name is
+        /// unknown. Never throws.
+        [[nodiscard]] UvRect GetUvOrDefault(std::string_view name, const UvRect& fallback = {}) const noexcept;
+
         [[nodiscard]] std::size_t Count() const noexcept { return m_regions.size(); }
+
+        [[nodiscard]] bool Empty() const noexcept { return m_regions.empty(); }
 
     private:
         int m_atlasWidth = 0;

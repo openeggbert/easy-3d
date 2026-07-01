@@ -1,8 +1,9 @@
 # NEXT.md — Easy3D handoff
 
 Concise handoff for resuming work on **easy-3d**, for Claude Code or a human.
-Reflects the repository state as of the last commit on branch `develop`
-(`a364ad7`, "Wire up CNA build/link integration"). Working tree is clean.
+Reflects the repository state after this session's data-side API expansion
+(2026-07-01, on top of commits `0ac99ca`/`1981616` on branch `develop`).
+Working tree has uncommitted changes from this session — see §3.
 
 ---
 
@@ -17,11 +18,13 @@ Reflects the repository state as of the last commit on branch `develop`
   batching, texture atlas, debug draw) so small 3D projects can be built against
   CNA without re-inventing glue. First concrete consumer is **Galaxy Eggbert**
   (a 3D remake of Mobile Eggbert / Speedy Blupi).
-* **Current phase:** **Phase 0/1 complete, mid-Phase 2 (basic rendering
-  helpers).** Camera helpers are implemented and tested. `BillboardBatch`,
+* **Current phase:** **Phase 0–2 complete** (scaffold, camera helpers,
+  data-side batching/atlas helpers). `TextureAtlas`, `BillboardBatch`,
   `CubeBatch`, and `DebugDraw` all now have real (still non-rendering)
-  item-storage interfaces — none of them issue GPU draw calls yet; that needs
-  a still-undecided CNA draw-path decision. See `docs/ROADMAP.md`.
+  item-storage/lookup interfaces — none of them issue GPU draw calls yet.
+  Phase 3 (CPU-side vertex builders) is the next recommended step; Phase 4
+  (CNA renderer adapters) is where a concrete CNA draw-path decision is
+  actually needed. See `docs/ROADMAP.md`.
 * **Key architectural decisions:**
   * Easy3D depends on CNA; nothing in CNA depends on Easy3D.
   * CNA math types (`Vector3`, `Matrix`) are declared in headers but **defined in
@@ -34,37 +37,53 @@ Reflects the repository state as of the last commit on branch `develop`
 ## 2. Current status
 
 * **Build status:** ✅ Working.
-  * Default (`cmake -S . -B build`): builds `libeasy3d.a` + the CNA-free
-    `basics` test, plus compile-only checks of `test_camera.cpp`/`main.cpp`
-    (`easy3d_test_camera_compilecheck`, `easy3d_minimal_compilecheck` — never
-    linked, so they don't need CNA; they exist to catch CNA header/API drift
-    even in this build). No CNA build required.
-  * CNA-linked (`-DEASY3D_LINK_CNA=ON`, backend `EASY_GL`): verified — builds
-    SHARP_RUNTIME + easygl backend + CNA + easy3d + camera example + camera test.
+  * Default (`cmake -S . -B build -DEASY3D_CNA_DIR=../cna`): builds
+    `libeasy3d.a` + the CNA-free `basics`/`texture_atlas` tests, plus
+    compile-only checks of `test_camera.cpp`/`test_batches.cpp`/`main.cpp`
+    (`easy3d_test_camera_compilecheck`, `easy3d_test_batches_compilecheck`,
+    `easy3d_minimal_compilecheck` — never linked, so they don't need CNA; they
+    exist to catch CNA header/API drift even in this build). Does not require
+    building or linking CNA itself, only its headers.
+  * CNA-linked (`-DEASY3D_LINK_CNA=ON -DEASY3D_CNA_BACKEND=EASY_GL
+    -DEASY3D_CNA_DIR=../cna`): verified — builds SHARP_RUNTIME + easygl backend
+    + CNA + easy3d + camera example + all 4 test executables.
 * **Test status:** ✅
-  * Default build: `ctest` → 1/1 pass (`basics`).
-  * CNA-linked build: `ctest` → 2/2 pass (`basics`, `camera`).
+  * Default build: `ctest` → 2/2 pass (`basics`, `texture_atlas`).
+  * CNA-linked build: `ctest` → 4/4 pass (`basics`, `texture_atlas`, `camera`,
+    `batches`).
 * **Available now:**
   * Library `easy3d` (alias `easy3d::easy3d`).
   * **Implemented:** `Easy3D::Camera3D`, `Easy3D::OrbitCamera`,
-    `Easy3D::FollowCamera` (real CNA view/projection math), `Easy3D::TextureAtlas`
-    (CNA-free, named pixel rects → normalized UVs), `Easy3D::Version*`.
+    `Easy3D::FollowCamera` (real CNA view/projection math), `Easy3D::Version*`.
+  * **`Easy3D::TextureAtlas`** (CNA-free): named pixel rects → normalized UVs
+    (`Add`/`GetRect`/`GetUv`, strict, throws `std::out_of_range` on unknown
+    names); `AddGrid(prefix, frameWidth, frameHeight, columns, rows, startX=0,
+    startY=0, spacingX=0, spacingY=0)` registers a row-major spritesheet grid
+    as `prefix_0`, `prefix_1`, ... (throws `std::invalid_argument` on bad
+    parameters; shares `Add()`'s overwrite-on-duplicate-name behavior);
+    `GetUvOrDefault(name, fallback={})` — never throws, returns `fallback` for
+    unknown names; `Contains`/`Count`/`Empty` (all `noexcept`).
   * **Non-rendering item storage:** `Easy3D::BillboardBatch` — `Add(position,
-    size, uv)` stores a `BillboardItem{Position, Size, Uv}` per call; `Items()`
-    exposes the queued list (`std::vector<BillboardItem>`). `Easy3D::CubeBatch`
-    — `Add(center, size)` stores a `CubeItem{Center, Size}` per call, same
-    `Items()` pattern. `Easy3D::DebugDraw` — `Line(from, to)`/`Box(center,
-    size)` store `LineItem`/`BoxItem` in separate vectors, exposed via
-    `Lines()`/`Boxes()`; `PrimitiveCount()` is their combined size. All three
-    still do no GPU work.
+    size)` / `Add(position, size, uv)` / `Add(BillboardItem)` store a
+    `BillboardItem{Position, Size, Uv={0,0,1,1}, Origin={0.5,0.5},
+    RotationRadians=0}` per call; `Items()` exposes the queue. `Easy3D::CubeBatch`
+    — `Add(center, size)` / `Add(center, size, uv)` / `Add(CubeItem)` store a
+    `CubeItem{Center, Size, Uv={0,0,1,1}}`, same `Items()` pattern.
+    `Easy3D::DebugDraw` — `Line(from, to)`/`Box(center, size)` store
+    `DebugLine`/`DebugBox` in separate vectors, exposed via `Lines()`/`Boxes()`;
+    `LineCount()`/`BoxCount()`/`PrimitiveCount()` (= line+box count). All three
+    also have `Begin()`/`Clear()`/`Empty()`/`Count()`/`End()` (no-op). None do
+    GPU work.
   * Example: `examples/minimal/main.cpp` (builds/runs only when CNA is linked).
     Observed output: `Easy3D 0.1.0` / `camera eye: (6.47308, 3.54624, 9.46168)` /
     `atlas regions: 1, blupi_idle_0 UV0: (0, 0)`.
 * **What does NOT work yet:**
   * No actual GPU rendering anywhere — `BillboardBatch`/`CubeBatch`/`DebugDraw`
-    only store queued items. Nothing draws yet.
-  * `TextureAtlas::GetUv` returns `(0,0,...)` if atlas size is unset/0 (by design),
-    which is why the example prints UV0 `(0, 0)` — see Known bugs/limitations.
+    only store queued items; `TextureAtlas` only stores/looks up data. Nothing
+    draws yet, and no vertex/index buffers are built yet either (that's Phase 3).
+  * `TextureAtlas::GetUv`/`GetUvOrDefault` return `(0,0,...)` if atlas size is
+    unset/0 (by design), which is why the example prints UV0 `(0, 0)` — see
+    Known bugs/limitations.
   * No `find_package(CNA)` / installed-package path; no prebuilt-lib import path
     (decided not needed for now — see `docs/QUESTIONS.md` Q3b).
   * No HUD/2D helpers, no model loading, no Lua (intentionally out of scope —
@@ -90,14 +109,61 @@ Reflects the repository state as of the last commit on branch `develop`
 * **Tests added:** `test_basics` (Version + TextureAtlas, CNA-free) and
   `test_camera` (Camera3D/OrbitCamera/FollowCamera defaults + math, needs CNA).
 * **TextureAtlas edge case, FollowCamera constant, compile-check targets, Q&A,
-  BillboardBatch/CubeBatch design (this session, 2026-07-01):** see §8 items
-  1–6 for full detail. Summary: added an unset-atlas-size `GetUv` test; named
+  BillboardBatch/CubeBatch/DebugDraw item storage (2026-07-01):** see §8 items
+  1–7 for full detail. Summary: added an unset-atlas-size `GetUv` test; named
   and documented the `FollowCamera` smoothing reference-fps constant + added
   convergence/frame-rate-independence tests; added `OBJECT`-library
   compile-only checks for `test_camera.cpp`/`main.cpp` in the default
   (no-CNA-link) build; recorded decisions for all 7 `docs/QUESTIONS.md` items;
-  turned `BillboardBatch` and `CubeBatch` into real (still non-rendering)
-  `Add(...)` → `Items()` interfaces.
+  turned `BillboardBatch`/`CubeBatch`/`DebugDraw` into real (still
+  non-rendering) `Add(...)`/`Line(...)`/`Box(...)` → `Items()`/`Lines()`/
+  `Boxes()` interfaces. Committed as `0ac99ca` and `1981616`.
+* **TextureAtlas grid/fallback API, BillboardItem/CubeItem extensions, test
+  reorganization, Phase renumbering (this session, 2026-07-01, uncommitted):**
+  a scripted task requested a broader data-side API pass across all four
+  helper classes plus test/doc updates. Summary:
+  * `TextureAtlas`: added `AddGrid(prefix, frameWidth, frameHeight, columns,
+    rows, startX=0, startY=0, spacingX=0, spacingY=0)` (row-major spritesheet
+    insertion, throws `std::invalid_argument` on bad params, shares `Add()`'s
+    overwrite behavior — documented, not changed); added
+    `GetUvOrDefault(name, fallback={})` (non-throwing lookup); added `Empty()`;
+    added `noexcept` to `Contains()` (matches `GetUvOrDefault`'s guarantee).
+  * `BillboardBatch`: `BillboardItem` gained `Origin` (CNA `Vector2`, default
+    `{0.5,0.5}` = center) and `RotationRadians` (default `0`); `Uv` got a
+    default member initializer (full texture `{0,0,1,1}`) so it's optional now.
+    Added `Add(position, size)` (2-arg, all-defaults overload) and
+    `Add(const BillboardItem&)` alongside the existing 3-arg `Add(position,
+    size, uv)`. Added `Clear()` (alias for `Begin()`'s clearing behavior) and
+    `Empty()`.
+  * `CubeBatch`: `CubeItem` gained a `Uv` member (default `{0,0,1,1}`). Added
+    `Add(center, size, uv)` and `Add(const CubeItem&)` alongside the existing
+    `Add(center, size)`. Added `Clear()` and `Empty()`.
+  * `DebugDraw`: renamed `LineItem`→`DebugLine`, `BoxItem`→`DebugBox` (no
+    external consumers existed yet, so this is a clean rename, not a breaking
+    change to any caller). Added `LineCount()`/`BoxCount()` alongside the
+    existing `PrimitiveCount()`.
+  * Tests reorganized: `tests/test_basics.cpp` now covers only `Version` (was
+    Version+TextureAtlas). New `tests/test_texture_atlas.cpp` (CNA-free) covers
+    `TextureAtlas` including `AddGrid`/`GetUvOrDefault`/invalid-parameter
+    cases. New `tests/test_batches.cpp` (needs CNA link, same reasoning as
+    `test_camera.cpp`) covers `BillboardBatch`/`CubeBatch`/`DebugDraw`,
+    including default-UV/origin/rotation, `Add(Item)` overloads, insertion
+    order, `Begin()`/`Clear()`/`End()`. `tests/test_camera.cpp` trimmed back to
+    just `Camera3D`/`OrbitCamera`/`FollowCamera`. `tests/CMakeLists.txt`
+    updated: new `easy3d_test_texture_atlas` executable (always built/run);
+    new `easy3d_test_batches`/`easy3d_test_batches_compilecheck` mirroring the
+    existing `easy3d_test_camera`/`_compilecheck` CNA-linked/no-link split.
+  * Docs: `README.md` got a "Current status" section. `docs/ROADMAP.md`
+    renumbered — old Phase 2 ("basic rendering helpers") is now explicitly
+    "data-side batching and atlas helpers" and marked done; inserted new
+    Phase 3 ("CPU-side vertex builders") and Phase 4 ("CNA renderer adapters")
+    between it and what was Phase 3 ("Galaxy Eggbert support", now Phase 5) and
+    Phase 4 ("Optional future", now Phase 6). `docs/QUESTIONS.md` reviewed for
+    "DECIDED by user"-style wording per the task's request — none found (the
+    file already says `— DECIDED (2026-07-01)` with full rationale/citations
+    inline, which satisfies the task's own exception clause "unless the
+    decision is directly documented elsewhere"), so left unchanged.
+  * **Not committed yet** — see §4/§10 for the exact files touched.
 
 ## 4. Current blocker / main problem
 
@@ -113,27 +179,33 @@ draw-path decision (how to actually issue GPU draw calls) is still needed
 before real rendering, but that's implementation detail for later, not an open
 question blocking the next small step.
 
-Pick the first unstruck task in §8.
+Pick the first unstruck task in §8. §8 item 8 (CPU-side vertex builders,
+Roadmap Phase 3) is the explicitly recommended next task from this session.
 
 * Exact symptom: n/a (no failure).
 * Failing command: n/a.
 * Failing test: n/a.
-* Affected files for the next step: none currently identified — see §8 for
-  the next task once one is picked (`BillboardBatch`/`CubeBatch`/`DebugDraw`
-  all have real item-storage interfaces as of §8 items 5–7; still no GPU
-  rendering anywhere).
-* Suspected cause: features simply not implemented yet (by design — Phase 2/3).
-* Already tried: full default + CNA-linked builds and both test suites — all green.
+* Affected files for the next step: none yet — item 8 (vertex builders) would
+  likely add new files, e.g. `include/Easy3D/BillboardMesh.hpp` or similar;
+  not started.
+* Suspected cause: features simply not implemented yet (by design — Phase 3/4).
+* Already tried: full default + CNA-linked builds and all 4 tests — all green
+  (this session verified with `-DEASY3D_CNA_DIR=../cna` since `../cna` exists
+  as a sibling repo in this environment; if it's absent elsewhere, the default
+  build still configures headers-only and only the CNA-free tests
+  (`basics`, `texture_atlas`) run).
 
 ## 5. Known bugs and limitations
 
-* **incomplete:** `BillboardBatch`, `CubeBatch`, `DebugDraw` do no rendering;
-  `Add`/`Line`/`Box` only increment a counter.
-* **needs verification:** `TextureAtlas::GetUv` returns a zero `UvRect{}` when
-  `atlasWidth/Height <= 0`. The minimal example constructs `TextureAtlas(256,256)`
-  yet prints `UV0 (0, 0)` — that is correct here only because the region origin is
-  `(0,0)`; confirm UVs are right for a non-zero-origin region (the `basics` test
-  already checks `{10,20,30,40}` → `(0.10,0.10,0.40,0.30)` and passes).
+* **incomplete (by design, Phase 2 is done, Phase 3/4 aren't started):**
+  `BillboardBatch`, `CubeBatch`, `DebugDraw` do no rendering and build no
+  vertex/index buffers; `Add`/`Line`/`Box` only append to a `std::vector`.
+* **verified (was "needs verification"):** `TextureAtlas::GetUv`/`GetUvOrDefault`
+  return a zero `UvRect{}` when `atlasWidth/Height <= 0`. The minimal example
+  constructs `TextureAtlas(256,256)` yet prints `UV0 (0, 0)` — that is correct
+  here only because the region origin is `(0,0)`; non-zero-origin regions are
+  now covered by `tests/test_texture_atlas.cpp` (`{10,20,30,40}` →
+  `(0.10,0.10,0.40,0.30)`, plus `AddGrid` frame rects/UVs) and pass.
 * ~~**limitation:** `FollowCamera::Update` smoothing magic constant.~~ **Resolved**
   (see §8 item 2): the `60.0f` is now the named, documented constant
   `kSmoothingReferenceFps` in `src/FollowCamera.cpp`; it is intentionally fixed
@@ -155,9 +227,11 @@ Pick the first unstruck task in §8.
     `Matrix::CreateLookAt` / `CreatePerspectiveFieldOfView`); `OrbitCamera`
     (target + yaw/pitch/distance → `ComputePosition`/`ApplyTo`); `FollowCamera`
     (offset + smoothing → `Update`/`ApplyTo`).
-  * Rendering stubs: `BillboardBatch`, `CubeBatch`, `DebugDraw`.
-  * Data: `TextureAtlas` + PODs `AtlasRect` (pixels) and `UvRect` (normalized);
-    CNA-free.
+  * Non-rendering item storage: `BillboardBatch` (`BillboardItem`: position,
+    size, UV, origin, rotation), `CubeBatch` (`CubeItem`: center, size, UV),
+    `DebugDraw` (`DebugLine`, `DebugBox`).
+  * Data: `TextureAtlas` (+ `AddGrid`/`GetUvOrDefault`) + PODs `AtlasRect`
+    (pixels) and `UvRect` (normalized); CNA-free.
   * `Version` (constexpr + `VersionString()`), umbrella `Easy3D.hpp`.
 * **Data flow:** a game owns the CNA `Game`/devices; Easy3D helpers compute
   matrices/positions and (eventually) feed a CNA graphics device. Easy3D never
@@ -181,24 +255,27 @@ Run from the repository root.
 
 ```sh
 # Configure + build (default: light, headers-only, no CNA link)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+# -DEASY3D_CNA_DIR=../cna is only needed if CNA isn't at the default relative
+# path; omit it if ../cna already sits next to this repo.
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DEASY3D_CNA_DIR=../cna
 cmake --build build -j
 
-# Test (default build → 1 test: basics)
+# Test (default build → 2 tests: basics, texture_atlas)
 ctest --test-dir build --output-on-failure
 
 # Configure + build WITH CNA linked (builds CNA via add_subdirectory, EASY_GL)
-cmake -S . -B build-cna -DCMAKE_BUILD_TYPE=Debug -DEASY3D_LINK_CNA=ON -DEASY3D_CNA_BACKEND=EASY_GL
+cmake -S . -B build-cna -DCMAKE_BUILD_TYPE=Debug -DEASY3D_LINK_CNA=ON -DEASY3D_CNA_BACKEND=EASY_GL -DEASY3D_CNA_DIR=../cna
 cmake --build build-cna -j        # heavy: builds SHARP_RUNTIME + CNA + easy-gl
 
-# Test (CNA-linked build → 2 tests: basics + camera)
+# Test (CNA-linked build → 4 tests: basics, texture_atlas, camera, batches)
 ctest --test-dir build-cna --output-on-failure
 
 # Run the most important demo (only exists in the CNA-linked build)
 ./build-cna/examples/minimal/easy3d_minimal
 
-# Compile-check camera test/example against CNA headers WITHOUT linking CNA
+# Compile-check camera/batch tests + example against CNA headers WITHOUT linking CNA
 c++ -std=c++23 -Iinclude -I../cna/include -c tests/test_camera.cpp -o /tmp/tc.o
+c++ -std=c++23 -Iinclude -I../cna/include -c tests/test_batches.cpp -o /tmp/tb.o
 c++ -std=c++23 -Iinclude -I../cna/include -c examples/minimal/main.cpp -o /tmp/mn.o
 ```
 
@@ -332,6 +409,29 @@ now have real (still non-rendering) item storage. The next real step for any
 of them is a CNA draw-path decision (how to actually issue GPU draw calls from
 `Items()`/`Lines()`/`Boxes()`) — not yet asked, not yet decided; raise it with
 the user before starting GPU work.
+
+8. **Add vertex-builder helpers for billboard quads, cube meshes, and debug
+   line geometry, still without GPU rendering (Roadmap Phase 3).**
+   * This is the explicitly recommended next task (per this session's scripted
+     task brief), following up on item 7's note above. It sits *between* the
+     current item storage (`Items()`/`Lines()`/`Boxes()`, done — Phase 2) and
+     an eventual CNA renderer adapter (not started — Phase 4, needs a CNA
+     draw-path decision first).
+   * Goal: convert queued `BillboardItem`/`CubeItem`/`DebugLine`/`DebugBox`
+     data into plain CPU-side vertex/index arrays (e.g. positions + UVs for a
+     billboard quad, 8 corners + 12/36 indices for a cube, 2 points per debug
+     line) — no `GraphicsDevice`, no vertex/index *buffers* (GPU resources), no
+     shaders, no `BasicEffect`/`SpriteBatch`. Plain `std::vector<...>` output
+     the caller could later upload to CNA.
+   * Files: likely new headers/sources (e.g. `include/Easy3D/BillboardMesh.hpp`,
+     `include/Easy3D/CubeMesh.hpp`, or a shared `VertexBuilder` helper — exact
+     shape not yet decided, worth a design pass before implementing) plus new
+     tests.
+   * Verify: default build + `ctest`, and CNA-linked build + `ctest` (existing
+     test counts will grow).
+   * **Do not** continue past this into Phase 4 (actual `GraphicsDevice` draw
+     calls) without checking in first — see `docs/QUESTIONS.md` for the kind of
+     CNA draw-path questions that would need answering before Phase 4 starts.
 
 ## 9. Do not do yet
 

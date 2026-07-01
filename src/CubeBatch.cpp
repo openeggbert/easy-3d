@@ -7,4 +7,14 @@ namespace Easy3D
     {
         m_items.push_back(CubeItem{center, size});
     }
+
+    void CubeBatch::Add(const Vector3& center, const Vector3& size, const UvRect& uv)
+    {
+        m_items.push_back(CubeItem{center, size, uv});
+    }
+
+    void CubeBatch::Add(const CubeItem& item)
+    {
+        m_items.push_back(item);
+    }
 }

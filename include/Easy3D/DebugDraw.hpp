@@ -12,14 +12,14 @@
 namespace Easy3D
 {
     /// @brief One queued debug line segment.
-    struct LineItem
+    struct DebugLine
     {
         Microsoft::Xna::Framework::Vector3 From;
         Microsoft::Xna::Framework::Vector3 To;
     };
 
     /// @brief One queued axis-aligned debug box.
-    struct BoxItem
+    struct DebugBox
     {
         Microsoft::Xna::Framework::Vector3 Center;
         Microsoft::Xna::Framework::Vector3 Size;
@@ -27,10 +27,10 @@ namespace Easy3D
 
     /// @brief Queues debug primitives (lines, boxes) for development overlays.
     ///
-    /// Line()/Box() store one `LineItem`/`BoxItem` per call; Lines()/Boxes()
-    /// expose them so a future CNA draw path can render them once the CNA
-    /// draw-path decision is made (see docs/ROADMAP.md). This class still does
-    /// no GPU work itself.
+    /// Line()/Box() store one `DebugLine`/`DebugBox` per call; Lines()/Boxes()
+    /// expose them so a future CPU-side vertex builder / CNA draw path can
+    /// consume them once that phase starts (see docs/ROADMAP.md). This class
+    /// still does no GPU work itself.
     class DebugDraw
     {
     public:
@@ -49,16 +49,20 @@ namespace Easy3D
         /// @note No GPU work yet; only records the item.
         void Box(const Vector3& center, const Vector3& size);
 
+        [[nodiscard]] std::size_t LineCount() const noexcept { return m_lines.size(); }
+
+        [[nodiscard]] std::size_t BoxCount() const noexcept { return m_boxes.size(); }
+
         [[nodiscard]] std::size_t PrimitiveCount() const noexcept { return m_lines.size() + m_boxes.size(); }
 
         /// @brief The queued line segments, in `Line()` call order.
-        [[nodiscard]] const std::vector<LineItem>& Lines() const noexcept { return m_lines; }
+        [[nodiscard]] const std::vector<DebugLine>& Lines() const noexcept { return m_lines; }
 
         /// @brief The queued boxes, in `Box()` call order.
-        [[nodiscard]] const std::vector<BoxItem>& Boxes() const noexcept { return m_boxes; }
+        [[nodiscard]] const std::vector<DebugBox>& Boxes() const noexcept { return m_boxes; }
 
     private:
-        std::vector<LineItem> m_lines;
-        std::vector<BoxItem> m_boxes;
+        std::vector<DebugLine> m_lines;
+        std::vector<DebugBox> m_boxes;
     };
 }
