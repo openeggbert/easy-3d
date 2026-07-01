@@ -8,6 +8,7 @@
 #include "Easy3D/FollowCamera.hpp"
 #include "Easy3D/BillboardBatch.hpp"
 #include "Easy3D/CubeBatch.hpp"
+#include "Easy3D/DebugDraw.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -132,6 +133,24 @@ int main()
     cubes.Begin();
     CHECK(cubes.Count() == 0);
     CHECK(cubes.Items().empty());
+
+    // --- DebugDraw: queues lines/boxes, exposes them, Clear() clears -------
+    Easy3D::DebugDraw debug;
+    CHECK(debug.PrimitiveCount() == 0);
+
+    debug.Line(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f));
+    debug.Box(Vector3(2.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f));
+    CHECK(debug.PrimitiveCount() == 2);
+
+    const auto& lines = debug.Lines();
+    const auto& boxes = debug.Boxes();
+    CHECK(lines.size() == 1 && boxes.size() == 1);
+    CHECK(approx(lines[0].From.X, 0.0f) && approx(lines[0].To.X, 1.0f));
+    CHECK(approx(boxes[0].Center.X, 2.0f) && approx(boxes[0].Size.X, 1.0f));
+
+    debug.Clear();
+    CHECK(debug.PrimitiveCount() == 0);
+    CHECK(debug.Lines().empty() && debug.Boxes().empty());
 
     if (g_failures == 0) {
         std::printf("easy3d camera test: OK\n");

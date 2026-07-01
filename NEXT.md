@@ -17,10 +17,11 @@ Reflects the repository state as of the last commit on branch `develop`
   batching, texture atlas, debug draw) so small 3D projects can be built against
   CNA without re-inventing glue. First concrete consumer is **Galaxy Eggbert**
   (a 3D remake of Mobile Eggbert / Speedy Blupi).
-* **Current phase:** **Phase 0/1 complete, start of Phase 2 (basic rendering
-  helpers).** Camera helpers are implemented and tested. `BillboardBatch` now
-  has a real (still non-rendering) item-storage interface; `CubeBatch` and
-  `DebugDraw` are still pure item-counting stubs. See `docs/ROADMAP.md`.
+* **Current phase:** **Phase 0/1 complete, mid-Phase 2 (basic rendering
+  helpers).** Camera helpers are implemented and tested. `BillboardBatch`,
+  `CubeBatch`, and `DebugDraw` all now have real (still non-rendering)
+  item-storage interfaces — none of them issue GPU draw calls yet; that needs
+  a still-undecided CNA draw-path decision. See `docs/ROADMAP.md`.
 * **Key architectural decisions:**
   * Easy3D depends on CNA; nothing in CNA depends on Easy3D.
   * CNA math types (`Vector3`, `Matrix`) are declared in headers but **defined in
@@ -52,15 +53,16 @@ Reflects the repository state as of the last commit on branch `develop`
     size, uv)` stores a `BillboardItem{Position, Size, Uv}` per call; `Items()`
     exposes the queued list (`std::vector<BillboardItem>`). `Easy3D::CubeBatch`
     — `Add(center, size)` stores a `CubeItem{Center, Size}` per call, same
-    `Items()` pattern. Both still do no GPU work.
-  * **Stub only (no item storage yet):** `Easy3D::DebugDraw` — only counts
-    queued primitives via `Line`/`Box`.
+    `Items()` pattern. `Easy3D::DebugDraw` — `Line(from, to)`/`Box(center,
+    size)` store `LineItem`/`BoxItem` in separate vectors, exposed via
+    `Lines()`/`Boxes()`; `PrimitiveCount()` is their combined size. All three
+    still do no GPU work.
   * Example: `examples/minimal/main.cpp` (builds/runs only when CNA is linked).
     Observed output: `Easy3D 0.1.0` / `camera eye: (6.47308, 3.54624, 9.46168)` /
     `atlas regions: 1, blupi_idle_0 UV0: (0, 0)`.
 * **What does NOT work yet:**
-  * No actual GPU rendering anywhere — `BillboardBatch`/`CubeBatch` only store
-    items; `DebugDraw` only counts them. Nothing draws yet.
+  * No actual GPU rendering anywhere — `BillboardBatch`/`CubeBatch`/`DebugDraw`
+    only store queued items. Nothing draws yet.
   * `TextureAtlas::GetUv` returns `(0,0,...)` if atlas size is unset/0 (by design),
     which is why the example prints UV0 `(0, 0)` — see Known bugs/limitations.
   * No `find_package(CNA)` / installed-package path; no prebuilt-lib import path
@@ -116,9 +118,10 @@ Pick the first unstruck task in §8.
 * Exact symptom: n/a (no failure).
 * Failing command: n/a.
 * Failing test: n/a.
-* Affected files for the next step: `src/DebugDraw.cpp` and its header
-  (`BillboardBatch`/`CubeBatch` already have real item-storage interfaces as of
-  §8 items 5–6).
+* Affected files for the next step: none currently identified — see §8 for
+  the next task once one is picked (`BillboardBatch`/`CubeBatch`/`DebugDraw`
+  all have real item-storage interfaces as of §8 items 5–7; still no GPU
+  rendering anywhere).
 * Suspected cause: features simply not implemented yet (by design — Phase 2/3).
 * Already tried: full default + CNA-linked builds and both test suites — all green.
 
@@ -303,18 +306,32 @@ c++ -std=c++23 -Iinclude -I../cna/include -c examples/minimal/main.cpp -o /tmp/m
      `CubeBatch` calls) + `ctest` → 1/1 pass. CNA-linked rebuild — `ctest` →
      2/2 pass (no regression).
 
-7. **Apply the same item-storage treatment to `DebugDraw` — or decide it's not
-   worth it yet.**
-   * Goal: either add `LineItem{From, To}` / `BoxItem{Center, Size}` storage
-     (mirroring items 5–6), or explicitly decide `DebugDraw` stays a pure
-     counter until a concrete debug-overlay consumer exists (it has none yet
-     — no Galaxy Eggbert dependency drives this the way Q7's billboard answer
-     drove `BillboardBatch`/`CubeBatch`). Worth asking the user which, since
-     unlike items 5/6 there's no roadmap/QUESTIONS.md answer already pointing
-     at "yes, do this now".
-   * Files (if implemented): `include/Easy3D/DebugDraw.hpp`,
-     `src/DebugDraw.cpp`, `tests/test_camera.cpp`.
-   * Verify: default build + `ctest` (1/1) and CNA-linked build + `ctest` (2/2).
+7. ~~**Apply the same item-storage treatment to `DebugDraw`.**~~ **Done
+   (2026-07-01).** User explicitly chose "implement now" (asked first, since
+   unlike items 5/6 there was no roadmap/QUESTIONS.md answer already pointing
+   at "yes, do this now" — `DebugDraw` has no concrete consumer yet). Mirrors
+   items 5/6, but with *two* item vectors instead of one (lines and boxes are
+   different shapes):
+   * `include/Easy3D/DebugDraw.hpp`: added `LineItem{From, To}` and
+     `BoxItem{Center, Size}` (both all-CNA-`Vector3` PODs); `Line(from, to)`/
+     `Box(center, size)` now store into separate `std::vector<LineItem>` /
+     `std::vector<BoxItem>` members; added `Lines()`/`Boxes()` accessors;
+     `Clear()` clears both vectors; `PrimitiveCount()` is now
+     `m_lines.size() + m_boxes.size()` (no separate counter member).
+   * `src/DebugDraw.cpp`: `Line`/`Box` shrank to one `push_back` line each.
+   * Tests: added a `DebugDraw` section to `tests/test_camera.cpp` (same
+     CNA-link reasoning as items 5–6) — one `Line` + one `Box` →
+     `PrimitiveCount()`/`Lines()`/`Boxes()` contents → `Clear()` empties both.
+   * Verified: default (no-CNA-link) build — `easy3d` +
+     `easy3d_test_camera_compilecheck` (now also compile-checking the
+     `DebugDraw` calls) + `ctest` → 1/1 pass. CNA-linked rebuild — `ctest` →
+     2/2 pass (no regression).
+
+All three rendering-helper stubs (`BillboardBatch`, `CubeBatch`, `DebugDraw`)
+now have real (still non-rendering) item storage. The next real step for any
+of them is a CNA draw-path decision (how to actually issue GPU draw calls from
+`Items()`/`Lines()`/`Boxes()`) — not yet asked, not yet decided; raise it with
+the user before starting GPU work.
 
 ## 9. Do not do yet
 

@@ -5,17 +5,11 @@ namespace Easy3D
 {
     void DebugDraw::Line(const Vector3& from, const Vector3& to)
     {
-        // TODO: queue a debug line once the CNA draw path is wired up.
-        (void)from;
-        (void)to;
-        ++m_primitiveCount;
+        m_lines.push_back(LineItem{from, to});
     }
 
     void DebugDraw::Box(const Vector3& center, const Vector3& size)
     {
-        // TODO: queue a debug box once the CNA draw path is wired up.
-        (void)center;
-        (void)size;
-        ++m_primitiveCount;
+        m_boxes.push_back(BoxItem{center, size});
     }
 }
