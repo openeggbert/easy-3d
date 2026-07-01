@@ -72,7 +72,9 @@ namespace Easy3D
                      int startX = 0, int startY = 0,
                      int spacingX = 0, int spacingY = 0);
 
-        [[nodiscard]] bool Contains(std::string_view name) const noexcept;
+        /// @note Not `noexcept`: looking `name` up allocates a temporary
+        /// `std::string` key, which can in principle throw `std::bad_alloc`.
+        [[nodiscard]] bool Contains(std::string_view name) const;
 
         /// @brief Look up a region by name.
         /// @throws std::out_of_range if @p name is unknown.
@@ -83,8 +85,10 @@ namespace Easy3D
         [[nodiscard]] UvRect GetUv(std::string_view name) const;
 
         /// @brief Normalized UVs for a region, or @p fallback if @p name is
-        /// unknown. Never throws.
-        [[nodiscard]] UvRect GetUvOrDefault(std::string_view name, const UvRect& fallback = {}) const noexcept;
+        /// unknown; unlike `GetUv()`, an unknown @p name is not an error.
+        /// @note Not `noexcept`: looking `name` up allocates a temporary
+        /// `std::string` key, which can in principle throw `std::bad_alloc`.
+        [[nodiscard]] UvRect GetUvOrDefault(std::string_view name, const UvRect& fallback = {}) const;
 
         [[nodiscard]] std::size_t Count() const noexcept { return m_regions.size(); }
 

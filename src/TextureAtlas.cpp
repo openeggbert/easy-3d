@@ -37,7 +37,7 @@ namespace Easy3D
         }
     }
 
-    bool TextureAtlas::Contains(std::string_view name) const noexcept
+    bool TextureAtlas::Contains(std::string_view name) const
     {
         return m_regions.find(std::string(name)) != m_regions.end();
     }
@@ -70,7 +70,7 @@ namespace Easy3D
         };
     }
 
-    UvRect TextureAtlas::GetUvOrDefault(std::string_view name, const UvRect& fallback) const noexcept
+    UvRect TextureAtlas::GetUvOrDefault(std::string_view name, const UvRect& fallback) const
     {
         const auto it = m_regions.find(std::string(name));
         if (it == m_regions.end())

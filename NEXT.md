@@ -1,9 +1,9 @@
 # NEXT.md — Easy3D handoff
 
 Concise handoff for resuming work on **easy-3d**, for Claude Code or a human.
-Reflects the repository state after this session's data-side API expansion
-(2026-07-01, on top of commits `0ac99ca`/`1981616` on branch `develop`).
-Working tree has uncommitted changes from this session — see §3.
+Reflects the repository state after a small cleanup pass (2026-07-01) on top
+of the data-side API expansion committed as `6390684` on branch `develop`.
+Working tree has uncommitted changes from this cleanup — see §3.
 
 ---
 
@@ -61,8 +61,11 @@ Working tree has uncommitted changes from this session — see §3.
     startY=0, spacingX=0, spacingY=0)` registers a row-major spritesheet grid
     as `prefix_0`, `prefix_1`, ... (throws `std::invalid_argument` on bad
     parameters; shares `Add()`'s overwrite-on-duplicate-name behavior);
-    `GetUvOrDefault(name, fallback={})` — never throws, returns `fallback` for
-    unknown names; `Contains`/`Count`/`Empty` (all `noexcept`).
+    `GetUvOrDefault(name, fallback={})` — treats an unknown name as normal
+    (returns `fallback` instead of throwing `std::out_of_range`); `Count`/
+    `Empty` are `noexcept`, `Contains`/`GetUvOrDefault` are not (both build a
+    temporary `std::string` key, which can in principle throw
+    `std::bad_alloc` — see §3 for the noexcept-removal fix in this session).
   * **Non-rendering item storage:** `Easy3D::BillboardBatch` — `Add(position,
     size)` / `Add(position, size, uv)` / `Add(BillboardItem)` store a
     `BillboardItem{Position, Size, Uv={0,0,1,1}, Origin={0.5,0.5},
@@ -119,15 +122,16 @@ Working tree has uncommitted changes from this session — see §3.
   non-rendering) `Add(...)`/`Line(...)`/`Box(...)` → `Items()`/`Lines()`/
   `Boxes()` interfaces. Committed as `0ac99ca` and `1981616`.
 * **TextureAtlas grid/fallback API, BillboardItem/CubeItem extensions, test
-  reorganization, Phase renumbering (this session, 2026-07-01, uncommitted):**
-  a scripted task requested a broader data-side API pass across all four
-  helper classes plus test/doc updates. Summary:
+  reorganization, Phase renumbering (2026-07-01):** a scripted task requested
+  a broader data-side API pass across all four helper classes plus test/doc
+  updates. Summary:
   * `TextureAtlas`: added `AddGrid(prefix, frameWidth, frameHeight, columns,
     rows, startX=0, startY=0, spacingX=0, spacingY=0)` (row-major spritesheet
     insertion, throws `std::invalid_argument` on bad params, shares `Add()`'s
     overwrite behavior — documented, not changed); added
-    `GetUvOrDefault(name, fallback={})` (non-throwing lookup); added `Empty()`;
-    added `noexcept` to `Contains()` (matches `GetUvOrDefault`'s guarantee).
+    `GetUvOrDefault(name, fallback={})` (non-throwing-on-unknown-name lookup);
+    added `Empty()`. (This pass also marked `Contains()`/`GetUvOrDefault()`
+    `noexcept` — **reverted** in the next entry below; see there for why.)
   * `BillboardBatch`: `BillboardItem` gained `Origin` (CNA `Vector2`, default
     `{0.5,0.5}` = center) and `RotationRadians` (default `0`); `Uv` got a
     default member initializer (full texture `{0,0,1,1}`) so it's optional now.
@@ -158,18 +162,48 @@ Working tree has uncommitted changes from this session — see §3.
     "data-side batching and atlas helpers" and marked done; inserted new
     Phase 3 ("CPU-side vertex builders") and Phase 4 ("CNA renderer adapters")
     between it and what was Phase 3 ("Galaxy Eggbert support", now Phase 5) and
-    Phase 4 ("Optional future", now Phase 6). `docs/QUESTIONS.md` reviewed for
-    "DECIDED by user"-style wording per the task's request — none found (the
-    file already says `— DECIDED (2026-07-01)` with full rationale/citations
-    inline, which satisfies the task's own exception clause "unless the
-    decision is directly documented elsewhere"), so left unchanged.
-  * **Not committed yet** — see §4/§10 for the exact files touched.
+    Phase 4 ("Optional future", now Phase 6).
+  * Committed as `6390684`.
+* **Cleanup pass: noexcept fix + docs/QUESTIONS.md wording (2026-07-01,
+  uncommitted):** a follow-up scripted task caught two issues from the
+  previous entry:
+  * **`noexcept` fix (correctness):** `TextureAtlas::Contains()` and
+    `TextureAtlas::GetUvOrDefault()` were marked `noexcept` in the previous
+    pass, but both call `m_regions.find(std::string(name))` — constructing
+    that temporary `std::string` can in principle throw `std::bad_alloc`, so
+    `noexcept` was a lie (would `std::terminate()` instead of propagating on
+    OOM). Removed `noexcept` from both the declarations
+    (`include/Easy3D/TextureAtlas.hpp`) and definitions
+    (`src/TextureAtlas.cpp`); added a one-line `@note` on each explaining why.
+    `Count()`/`Empty()` stay `noexcept` (no string construction). Behavior
+    unchanged; no test changes needed (no test asserted `noexcept`-ness).
+    True allocation-free transparent lookup (heterogeneous hashing) was
+    explicitly out of scope for this fix.
+  * **`docs/QUESTIONS.md` wording:** replaced all 8 `— DECIDED (2026-07-01[,
+    ...])` headings with `— Current project decision` (or `— Current project
+    decision (discussion only)` for Q5) per the user's request for more
+    neutral wording. Also fixed a stale cross-reference: Q5's body said "see
+    `docs/ROADMAP.md` Phase 4" for the Lua discussion, but Phase 4 is now "CNA
+    renderer adapters" after the Phase renumbering in the previous entry — the
+    Lua discussion actually lives in Phase 6 ("Optional future"). Fixed to
+    Phase 6. No decisions themselves were changed, only headings/wording and
+    that one stale reference.
+  * Verified: `cmake -S . -B build -DEASY3D_CNA_DIR=../cna && cmake --build
+    build -j && ctest --test-dir build --output-on-failure` → 2/2 pass
+    (`basics`, `texture_atlas`). Also re-verified the existing CNA-linked
+    build (`build-cna`, already configured with `-DEASY3D_LINK_CNA=ON
+    -DEASY3D_CNA_BACKEND=EASY_GL -DEASY3D_CNA_DIR=../cna`): rebuild + `ctest`
+    → 4/4 pass (`basics`, `texture_atlas`, `camera`, `batches`) — no
+    regression from the `noexcept` removal.
+  * **Not committed yet.**
 
 ## 4. Current blocker / main problem
 
 **There is no failing build or test — nothing is currently blocked.**
 
-All `docs/QUESTIONS.md` items are now **DECIDED** (2026-07-01, see §8 item 4):
+All `docs/QUESTIONS.md` items are settled as **current project decisions**
+(2026-07-01, see §8 item 4; headings reworded from "DECIDED" to "Current
+project decision" in the cleanup pass in §3, decisions themselves unchanged):
 Blupi will render as a 2D billboard from Mobile Eggbert sprites (Q7), and
 Easy3D stays billboard/cube/tile-only, no 3D models (Q6). The scope/decision
 gate that used to block rendering work is gone; the rendering helpers
