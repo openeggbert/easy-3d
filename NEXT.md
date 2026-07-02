@@ -18,13 +18,18 @@ Working tree has uncommitted changes from this cleanup — see §3.
   batching, texture atlas, debug draw) so small 3D projects can be built against
   CNA without re-inventing glue. First concrete consumer is **Galaxy Eggbert**
   (a 3D remake of Mobile Eggbert / Speedy Blupi).
-* **Current phase:** **Phase 0–2 complete** (scaffold, camera helpers,
-  data-side batching/atlas helpers). `TextureAtlas`, `BillboardBatch`,
-  `CubeBatch`, and `DebugDraw` all now have real (still non-rendering)
-  item-storage/lookup interfaces — none of them issue GPU draw calls yet.
-  Phase 3 (CPU-side vertex builders) is the next recommended step; Phase 4
-  (CNA renderer adapters) is where a concrete CNA draw-path decision is
-  actually needed. See `docs/ROADMAP.md`.
+* **Current phase:** **Phase 0–2 complete**, **Phase 3/4 in progress** (scaffold,
+  camera helpers, data-side batching/atlas helpers all done; CPU-side vertex
+  builders and CNA renderer adapters started, for cubes specifically).
+  `TextureAtlas`, `BillboardBatch`, `CubeBatch`, and `DebugDraw` all have real
+  (still non-rendering) item-storage/lookup interfaces. `Easy3D::CubeMesh`
+  (`AppendCubeMesh`/`BuildCubeMesh`, added 2026-07-02 for Galaxy Eggbert's
+  `E3D-MIG-051`) turns `CubeBatch` items into CPU-side vertex/index arrays.
+  `Easy3D::CubeMeshRenderer` (added 2026-07-02 for `E3D-MIG-052`) actually
+  **does** issue CNA draw calls now — `VertexBuffer`/`IndexBuffer`/
+  `BasicEffect`/`GraphicsDevice::DrawIndexedPrimitives`, the same pattern
+  proven by CNA's own `examples/house3d_demo.cpp`. Billboard/debug-line
+  vertex builders and renderer adapters remain unbuilt. See `docs/ROADMAP.md`.
 * **Key architectural decisions:**
   * Easy3D depends on CNA; nothing in CNA depends on Easy3D.
   * CNA math types (`Vector3`, `Matrix`) are declared in headers but **defined in
@@ -81,9 +86,10 @@ Working tree has uncommitted changes from this cleanup — see §3.
     Observed output: `Easy3D 0.1.0` / `camera eye: (6.47308, 3.54624, 9.46168)` /
     `atlas regions: 1, blupi_idle_0 UV0: (0, 0)`.
 * **What does NOT work yet:**
-  * No actual GPU rendering anywhere — `BillboardBatch`/`CubeBatch`/`DebugDraw`
-    only store queued items; `TextureAtlas` only stores/looks up data. Nothing
-    draws yet, and no vertex/index buffers are built yet either (that's Phase 3).
+  * `BillboardBatch`/`DebugDraw` still only store queued items — no vertex
+    builder or renderer adapter exists for either yet. `CubeBatch` is the
+    exception: `CubeMesh` (vertex builder) + `CubeMeshRenderer` (renderer
+    adapter) together can now genuinely draw cubes end-to-end — see §3.
   * `TextureAtlas::GetUv`/`GetUvOrDefault` return `(0,0,...)` if atlas size is
     unset/0 (by design), which is why the example prints UV0 `(0, 0)` — see
     Known bugs/limitations.
@@ -94,6 +100,57 @@ Working tree has uncommitted changes from this cleanup — see §3.
 
 ## 3. Recent changes
 
+* **`CubeMeshRenderer` CNA renderer adapter (2026-07-02, uncommitted):**
+  Roadmap Phase 4, requested by galaxy-eggbert (`E3D-MIG-052`). New
+  `include/Easy3D/CubeMeshRenderer.hpp` + `src/CubeMeshRenderer.cpp`:
+  constructor uploads a `CubeMesh`'s `CubeVertex`/index arrays to CNA GPU
+  buffers once (`CubeVertex{Position,Uv}` → CNA `VertexPositionTexture`, an
+  exact field match; 32-bit `IndexBuffer` matching `CubeMesh`'s `uint32_t`
+  indices); `Draw(GraphicsDevice&, BasicEffect&)` issues
+  `DrawIndexedPrimitives` inside the effect's current-technique pass loop —
+  the same pattern CNA's own `examples/house3d_demo.cpp` already proves
+  works. The caller owns/configures the `BasicEffect`
+  (World/View/Projection/Texture); the adapter has zero Eggbert-specific
+  knowledge. Draw-path decision (raw `VertexBuffer`+`IndexBuffer`+
+  `BasicEffect`, not `SpriteBatch` which is 2D-only) made after surveying
+  CNA's real, tested 3D API surface — recorded in `docs/ROADMAP.md` Phase 4.
+  **Bug found and fixed along the way:** the headers-only default build
+  (`EASY3D_LINK_CNA=OFF`, no parent CNA target) was missing
+  `../sharp-runtime/include` on its path — `GraphicsDevice.hpp`/
+  `BasicEffect.hpp` pull in `Color.hpp` → `SharpRuntime/SharpRuntimeHelper.hpp`
+  even just to declare types, unlike the shallow `Vector2`/`Vector3`/`Matrix`
+  headers `Camera3D`/`CubeBatch`/`CubeMesh` use. Added a new
+  `EASY3D_SHARP_RUNTIME_DIR` cache variable (mirrors the existing
+  `EASY3D_CNA_DIR` pattern) and wired it into the headers-only
+  `target_include_directories` branch. New `tests/test_cube_mesh_renderer.cpp`
+  — **compile-check only, unconditionally** (not gated by `EASY3D_CNA_LINKED`
+  like the other tests), since the class needs a live `GraphicsDevice&` that
+  only exists once a real CNA `Game` has opened a window — not something a
+  plain `main()` can produce.
+  * Verified: default (no-CNA-link) build — `easy3d` +
+    `easy3d_test_cube_mesh_renderer_compilecheck` + `ctest` → 2/2 pass (no
+    regression). CNA-linked rebuild — `ctest` → 5/5 pass (`basics`,
+    `texture_atlas`, `camera`, `batches`, `cube_mesh`; the renderer test
+    isn't linked/run here either way, by design).
+  * **Real runtime GPU verification came from galaxy-eggbert, not from a test
+    in this repo:** galaxy-eggbert wired one temporary hardcoded debug cube
+    into its `GalaxyEggbertCnaGame`, ran the real windowed `GalaxyEggbertCNA`
+    binary, and read back the center-screen pixel via
+    `GraphicsDevice::GetBackBufferData` (mirroring CNA's own
+    `easygl_vertex_formats_test.cpp` readback pattern) — printed `RGBA (255,
+    255, 255, 255)`, clearly distinct from the sky-blue clear color,
+    confirming a real `DrawIndexedPrimitives` call actually rasterized pixels.
+* **`CubeMesh` CPU-side vertex builder (2026-07-02, uncommitted):** implements
+  the cube portion of the recommended §8 item 8 task, requested by
+  galaxy-eggbert (`E3D-MIG-051`, following its own `E3D-MIG-050` decision that
+  this work belongs here rather than as a Galaxy-Eggbert-local adapter). See
+  §8 item 8 for full detail. Summary: new `Easy3D::CubeVertex`,
+  `AppendCubeMesh`, `BuildCubeMesh` (`include/Easy3D/CubeMesh.hpp` +
+  `src/CubeMesh.cpp`); `CMakeLists.txt` and `Easy3D.hpp` updated; new
+  CNA-link-gated `tests/test_cube_mesh.cpp`. Verified: default build 2/2,
+  CNA-linked build 5/5, plus a clean rebuild of galaxy-eggbert's
+  `GalaxyEggbertCNA` consumer and its unrelated 54-test `GalaxyEggbertWorldsTests`
+  suite (no regressions). **Not committed yet.**
 * **Initial commit (`b2f004a`):** `README.md`, `.gitignore`, `LICENSE` (MIT).
   Present on both `master` and `develop`.
 * **Scaffold (`6f9b261`):** added `CMakeLists.txt`; headers `include/Easy3D/*.hpp`
@@ -200,6 +257,11 @@ Working tree has uncommitted changes from this cleanup — see §3.
 ## 4. Current blocker / main problem
 
 **There is no failing build or test — nothing is currently blocked.**
+
+**Update (2026-07-02):** the cube portion of §8 item 8 (CPU-side vertex
+builder) is now done — see §3. The remaining pieces (billboard/debug-line
+vertex builders, and the still-undecided Phase 4 CNA draw-path) are unchanged
+from below.
 
 All `docs/QUESTIONS.md` items are settled as **current project decisions**
 (2026-07-01, see §8 item 4; headings reworded from "DECIDED" to "Current
@@ -457,22 +519,65 @@ the user before starting GPU work.
      line) — no `GraphicsDevice`, no vertex/index *buffers* (GPU resources), no
      shaders, no `BasicEffect`/`SpriteBatch`. Plain `std::vector<...>` output
      the caller could later upload to CNA.
-   * Files: likely new headers/sources (e.g. `include/Easy3D/BillboardMesh.hpp`,
-     `include/Easy3D/CubeMesh.hpp`, or a shared `VertexBuilder` helper — exact
-     shape not yet decided, worth a design pass before implementing) plus new
-     tests.
-   * Verify: default build + `ctest`, and CNA-linked build + `ctest` (existing
-     test counts will grow).
-   * **Do not** continue past this into Phase 4 (actual `GraphicsDevice` draw
-     calls) without checking in first — see `docs/QUESTIONS.md` for the kind of
-     CNA draw-path questions that would need answering before Phase 4 starts.
+   * ~~Cube part~~ **Done (2026-07-02).** `include/Easy3D/CubeMesh.hpp` +
+     `src/CubeMesh.cpp`: `Easy3D::CubeVertex{Position, Uv}`,
+     `AppendCubeMesh(const CubeItem&, vertices, indices)` (24 vertices, 36
+     indices — 4 vertices per face so each face carries its own UV corners,
+     rather than 8 shared corners, since a shared-corner vertex can't hold 3
+     different per-face UVs) and `BuildCubeMesh(const CubeBatch&, vertices,
+     indices)` (concatenates every item, offsetting indices correctly). Faces
+     wound CCW as seen from outside (outward normal = `(v1-v0) x (v2-v0)`),
+     matching CNA/XNA's right-handed convention. Requested by Galaxy Eggbert's
+     `E3D-MIG-051` — that repo's own `E3D-MIG-050` decided this vertex-builder
+     work belongs here, in Easy3D, not as a Galaxy-Eggbert-local adapter.
+     `Easy3D.hpp` umbrella header updated; `CMakeLists.txt`
+     (`src/CubeMesh.cpp` added to the library); new
+     `tests/test_cube_mesh.cpp` (CNA-link-gated, same pattern as
+     `test_batches.cpp`) covering single-cube geometry/UV correctness,
+     custom-UV/off-center cubes, multi-item `BuildCubeMesh` index offsetting,
+     and the empty-batch case.
+     * Verified: default (no-CNA-link) build — `easy3d` +
+       `easy3d_test_cube_mesh_compilecheck` + `ctest` → 2/2 pass (no
+       regression). CNA-linked rebuild (`-DEASY3D_LINK_CNA=ON
+       -DEASY3D_CNA_BACKEND=EASY_GL`) — `ctest` → 5/5 pass (`basics`,
+       `texture_atlas`, `camera`, `batches`, `cube_mesh`). Also re-verified
+       galaxy-eggbert's `GalaxyEggbertCNA` target still builds clean against
+       this updated `easy3d`, and its unrelated `GalaxyEggbertWorldsTests`
+       (54 tests) still pass — confirming this change didn't regress the
+       consumer.
+   * **Remaining:** billboard quad vertex builder and debug line/box vertex
+     builder are not started — `CubeMesh` was prioritized because it's what
+     Galaxy Eggbert's terrain phase (Phase 5) actually needs first; billboard
+     geometry is needed later for Blupi (Phase 6).
+   * ~~**Do not continue past this into Phase 4 without checking in first.**~~
+     Checked in — see item 9 below.
+
+9. ~~**Phase 4: CNA renderer adapter for `CubeBatch`.**~~ **Done (2026-07-02),
+   user approved.** See §3 for full detail. Summary: `Easy3D::CubeMeshRenderer`
+   (`include/Easy3D/CubeMeshRenderer.hpp` + `src/CubeMeshRenderer.cpp`)
+   uploads `CubeMesh` vertex/index data to CNA `VertexBuffer`/`IndexBuffer`
+   once, then `Draw(GraphicsDevice&, BasicEffect&)` issues
+   `DrawIndexedPrimitives` — the exact pattern CNA's own
+   `examples/house3d_demo.cpp` proves works. Draw-path decision: raw
+   `VertexBuffer`+`IndexBuffer`+`BasicEffect`, not `SpriteBatch` (2D-only).
+   Fixed a real headers-only-build bug along the way (missing
+   `../sharp-runtime/include`, new `EASY3D_SHARP_RUNTIME_DIR` cache var).
+   Verified end-to-end via galaxy-eggbert's real windowed `GalaxyEggbertCNA`
+   binary (pixel readback confirmed real draw output), since
+   `CubeMeshRenderer` needs a live `GraphicsDevice` a plain test `main()`
+   can't produce — see `tests/test_cube_mesh_renderer.cpp` (compile-check
+   only, by design).
+   * **Remaining for full Phase 4:** billboard renderer adapter (needed once
+     the billboard vertex builder from item 8 exists) and debug line/box
+     renderer adapter. Neither is started.
 
 ## 9. Do not do yet
 
-* **No GPU rendering implementation** in `BillboardBatch`/`CubeBatch`/`DebugDraw`
-  until a CNA draw-path decision is made (Q6/Q7 *scope* is decided — billboard
-  from Mobile Eggbert sprites, no 3D models — but *how draw calls are issued*
-  is a separate, still-open implementation decision).
+* **No GPU rendering implementation** in `BillboardBatch`/`DebugDraw` until
+  their own CNA draw-path check-in happens (mirroring `CubeBatch`/`CubeMesh`/
+  `CubeMeshRenderer`, which now has one — see §8 items 8/9). Don't assume the
+  cube draw-path decision automatically extends to billboards/debug lines
+  without asking first.
 * **No refactor of CNA** and **no edits** to `../cna`, `../sharp-runtime`,
   `../mobile-eggbert`, `../galaxy-eggbert`. **No reading/copying** `../simple-3d`.
 * **No new subsystems**: no ECS, physics, navigation, networking, editor, asset

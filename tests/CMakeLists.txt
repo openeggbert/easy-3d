@@ -26,6 +26,10 @@ if(EASY3D_CNA_LINKED)
     add_executable(easy3d_test_batches test_batches.cpp)
     target_link_libraries(easy3d_test_batches PRIVATE easy3d)
     add_test(NAME batches COMMAND easy3d_test_batches)
+
+    add_executable(easy3d_test_cube_mesh test_cube_mesh.cpp)
+    target_link_libraries(easy3d_test_cube_mesh PRIVATE easy3d)
+    add_test(NAME cube_mesh COMMAND easy3d_test_cube_mesh)
 else()
     add_library(easy3d_test_camera_compilecheck OBJECT test_camera.cpp)
     target_link_libraries(easy3d_test_camera_compilecheck PRIVATE easy3d)
@@ -33,7 +37,18 @@ else()
     add_library(easy3d_test_batches_compilecheck OBJECT test_batches.cpp)
     target_link_libraries(easy3d_test_batches_compilecheck PRIVATE easy3d)
 
+    add_library(easy3d_test_cube_mesh_compilecheck OBJECT test_cube_mesh.cpp)
+    target_link_libraries(easy3d_test_cube_mesh_compilecheck PRIVATE easy3d)
+
     message(STATUS
-        "Easy3D: camera/batches tests compile-checked only, not run "
+        "Easy3D: camera/batches/cube_mesh tests compile-checked only, not run "
         "(needs CNA linked to run: -DEASY3D_LINK_CNA=ON, or a parent-provided CNA target).")
 endif()
+
+# CubeMeshRenderer needs a live GraphicsDevice, which only exists once a real
+# CNA Game has opened a window — not something a plain main() can produce.
+# Always a compile-only check (never linked into a runnable executable, in
+# either CNA-linked or headers-only builds); see test_cube_mesh_renderer.cpp's
+# header comment for where the real runtime verification lives instead.
+add_library(easy3d_test_cube_mesh_renderer_compilecheck OBJECT test_cube_mesh_renderer.cpp)
+target_link_libraries(easy3d_test_cube_mesh_renderer_compilecheck PRIVATE easy3d)

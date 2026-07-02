@@ -50,6 +50,28 @@ else()
         "until CNA's <Microsoft/Xna/Framework/*.hpp> headers are visible.")
 endif()
 
+# Some deeper CNA headers (Graphics/GraphicsDevice.hpp, Graphics/BasicEffect.hpp,
+# via Color.hpp) include <SharpRuntime/SharpRuntimeHelper.hpp> directly, even
+# just to declare types — unlike the shallow Vector2/Vector3/Matrix headers
+# used by Camera3D/CubeBatch/BillboardBatch. When CNA is actually built
+# (EASY3D_LINK_CNA=ON or a parent-provided CNA target), CNA's own CMakeLists
+# already exposes SHARP_RUNTIME's include dir transitively. In the
+# headers-only default build, nothing builds sharp-runtime, so its include
+# dir needs to be added explicitly, the same way EASY3D_CNA_INCLUDE_DIR is.
+set(EASY3D_SHARP_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime"
+    CACHE PATH "Path to the sharp-runtime repository (provides headers under <dir>/include).")
+
+if(EXISTS "${EASY3D_SHARP_RUNTIME_DIR}/include")
+    set(EASY3D_SHARP_RUNTIME_INCLUDE_DIR "${EASY3D_SHARP_RUNTIME_DIR}/include")
+    message(STATUS "Easy3D: using sharp-runtime headers from ${EASY3D_SHARP_RUNTIME_INCLUDE_DIR}")
+else()
+    message(WARNING
+        "Easy3D: sharp-runtime headers not found at '${EASY3D_SHARP_RUNTIME_DIR}/include'. "
+        "Set -DEASY3D_SHARP_RUNTIME_DIR=/path/to/sharp-runtime. Headers-only builds of "
+        "CubeMeshRenderer.hpp (and anything else touching GraphicsDevice/BasicEffect) will "
+        "not compile until <SharpRuntime/*.hpp> headers are visible.")
+endif()
+
 # ---------------------------------------------------------------------------
 # easy3d library
 # ---------------------------------------------------------------------------
@@ -60,6 +82,8 @@ add_library(easy3d STATIC
     src/FollowCamera.cpp
     src/BillboardBatch.cpp
     src/CubeBatch.cpp
+    src/CubeMesh.cpp
+    src/CubeMeshRenderer.cpp
     src/TextureAtlas.cpp
     src/DebugDraw.cpp
 )
@@ -121,6 +145,9 @@ if(_easy3d_have_cna_target)
 elseif(EASY3D_CNA_INCLUDE_DIR)
     # (3) Headers-only: compile against CNA headers; consumer links CNA later.
     target_include_directories(easy3d PUBLIC "${EASY3D_CNA_INCLUDE_DIR}")
+    if(EASY3D_SHARP_RUNTIME_INCLUDE_DIR)
+        target_include_directories(easy3d PUBLIC "${EASY3D_SHARP_RUNTIME_INCLUDE_DIR}")
+    endif()
 endif()
 
 # Whether camera-running targets (example/tests that execute CNA math) can link.

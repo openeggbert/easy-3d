@@ -14,5 +14,7 @@
 #include "Easy3D/FollowCamera.hpp"
 #include "Easy3D/BillboardBatch.hpp"
 #include "Easy3D/CubeBatch.hpp"
+#include "Easy3D/CubeMesh.hpp"
+#include "Easy3D/CubeMeshRenderer.hpp"
 #include "Easy3D/TextureAtlas.hpp"
 #include "Easy3D/DebugDraw.hpp"

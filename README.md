@@ -43,8 +43,15 @@ If you find yourself building any of the above, it does **not** belong in Easy3D
   (`AddGrid`), plus a non-throwing lookup (`GetUvOrDefault`).
 * `BillboardBatch`, `CubeBatch`, and `DebugDraw` store queued data
   (`BillboardItem`/`CubeItem`/`DebugLine`+`DebugBox`) for later use.
-* Rendering (issuing actual CNA draw calls) is **intentionally not implemented
-  yet** — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+* `CubeMesh` (`AppendCubeMesh`/`BuildCubeMesh`) turns queued `CubeBatch` items
+  into plain CPU-side vertex/index arrays (24 vertices + 36 indices per cube,
+  one UV per face) — still no GPU work. Billboard/debug-line vertex builders
+  are not implemented yet.
+* `CubeMeshRenderer` **does** issue real CNA draw calls: uploads a `CubeMesh`
+  to GPU `VertexBuffer`/`IndexBuffer` once, then draws it via a
+  caller-configured `BasicEffect` and `GraphicsDevice::DrawIndexedPrimitives`.
+  Billboard/debug-line renderer adapters are not implemented yet — see
+  [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
