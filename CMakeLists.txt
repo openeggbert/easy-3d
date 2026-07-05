@@ -81,6 +81,8 @@ add_library(easy3d STATIC
     src/OrbitCamera.cpp
     src/FollowCamera.cpp
     src/BillboardBatch.cpp
+    src/BillboardMesh.cpp
+    src/BillboardMeshRenderer.cpp
     src/CubeBatch.cpp
     src/CubeMesh.cpp
     src/CubeMeshRenderer.cpp
