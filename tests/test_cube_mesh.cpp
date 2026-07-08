@@ -302,6 +302,27 @@ int main()
         }
     }
 
+    // --- AppendPlateMesh: Y axis -- horizontal, lies in the Y=const plane --
+    {
+        Easy3D::PlateItem item;
+        item.Center = Vector3(0.0f, 2.0f, 0.0f);
+        item.Width = 1.0f;
+        item.Height = 1.0f;
+        item.Axis = Easy3D::PlateAxis::Y;
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendPlateMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 8);
+        CHECK(indices.size() == 12);
+        for (const auto& v : vertices) {
+            CHECK(approx(v.Position.Y, 2.0f));
+            CHECK(v.Position.X >= -0.5001f && v.Position.X <= 0.5001f);
+            CHECK(v.Position.Z >= -0.5001f && v.Position.Z <= 0.5001f);
+        }
+    }
+
     // --- AppendTripleCrossMesh: 3 double-sided planes, 24 verts/36 indices -
     {
         Easy3D::TripleCrossItem item;

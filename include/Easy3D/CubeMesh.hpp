@@ -83,22 +83,27 @@ namespace Easy3D
                                    std::vector<CubeVertex>& vertices,
                                    std::vector<std::uint32_t>& indices);
 
-    /// @brief Which plane a `PlateItem` lies in. `Z` spans X (width) and Y
-    /// (height), facing +Z/-Z (a "north-south wall" reading). `X` spans Z
-    /// (width) and Y (height), facing +X/-X (an "east-west wall" reading).
-    enum class PlateAxis { Z, X };
+    /// @brief Which plane a `PlateItem` lies in. `Z` spans X (`Width`) and Y
+    /// (`Height`), facing +Z/-Z (a "north-south wall" reading). `X` spans Z
+    /// (`Width`) and Y (`Height`), facing +X/-X (an "east-west wall"
+    /// reading). `Y` spans X (`Width`) and Z (`Height`), facing +Y/-Y (a
+    /// horizontal "floor/ceiling/tabletop" reading — e.g. a grass-top
+    /// surface sitting above an otherwise ordinary block).
+    enum class PlateAxis { Z, X, Y };
 
     /// @brief The "InnerFlatPlate" render mode identified by
     /// mobile-eggbert-reference/questionnaire-all-remaining-tiles.md: a
     /// single flat double-sided plate centered inside an otherwise fully
     /// transparent block (e.g. a signpost, thin post, or screen) — the
     /// block's outer 6 faces are simply never drawn at all by the caller,
-    /// this only builds the plate itself.
+    /// this only builds the plate itself. `PlateAxis::Y` (horizontal) is
+    /// also used standalone for surface-only effects (e.g. a grass top),
+    /// not just `InnerFlatPlate`.
     struct PlateItem
     {
         Microsoft::Xna::Framework::Vector3 Center;
-        float Width = 1.0f;  // extent along the in-plane horizontal axis
-        float Height = 1.0f; // extent along Y
+        float Width = 1.0f;  // extent along the plane's first in-plane axis (X for Z/Y axis, Z for X axis)
+        float Height = 1.0f; // extent along the plane's second in-plane axis (Y for Z/X axis, Z for Y axis)
         UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};
         PlateAxis Axis = PlateAxis::Z;
     };

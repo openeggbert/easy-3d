@@ -150,7 +150,10 @@ namespace Easy3D
 
         // Corner order matches AppendFace's convention: bottom-left,
         // bottom-right, top-right, top-left as seen from the plate's
-        // "front" normal (+Z for PlateAxis::Z, +X for PlateAxis::X).
+        // "front" normal (+Z for PlateAxis::Z, +X for PlateAxis::X, +Y for
+        // PlateAxis::Y -- for Y, "bottom-left"/"top-right" etc. read as
+        // -X-Z/+X+Z corners instead, there being no true up/down on a
+        // horizontal plate).
         Vector3 corners[4];
         if (item.Axis == PlateAxis::Z)
         {
@@ -159,12 +162,19 @@ namespace Easy3D
             corners[2] = Vector3(item.Center.X + halfW, item.Center.Y + halfH, item.Center.Z);
             corners[3] = Vector3(item.Center.X - halfW, item.Center.Y + halfH, item.Center.Z);
         }
-        else
+        else if (item.Axis == PlateAxis::X)
         {
             corners[0] = Vector3(item.Center.X, item.Center.Y - halfH, item.Center.Z - halfW);
             corners[1] = Vector3(item.Center.X, item.Center.Y - halfH, item.Center.Z + halfW);
             corners[2] = Vector3(item.Center.X, item.Center.Y + halfH, item.Center.Z + halfW);
             corners[3] = Vector3(item.Center.X, item.Center.Y + halfH, item.Center.Z - halfW);
+        }
+        else // PlateAxis::Y
+        {
+            corners[0] = Vector3(item.Center.X - halfW, item.Center.Y, item.Center.Z - halfH);
+            corners[1] = Vector3(item.Center.X + halfW, item.Center.Y, item.Center.Z - halfH);
+            corners[2] = Vector3(item.Center.X + halfW, item.Center.Y, item.Center.Z + halfH);
+            corners[3] = Vector3(item.Center.X - halfW, item.Center.Y, item.Center.Z + halfH);
         }
 
         const Vector2 uvs[4] = {
