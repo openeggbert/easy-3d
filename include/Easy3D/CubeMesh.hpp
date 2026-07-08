@@ -82,4 +82,55 @@ namespace Easy3D
     void AppendDirectionalCubeMesh(const DirectionalCubeItem& item,
                                    std::vector<CubeVertex>& vertices,
                                    std::vector<std::uint32_t>& indices);
+
+    /// @brief Which plane a `PlateItem` lies in. `Z` spans X (width) and Y
+    /// (height), facing +Z/-Z (a "north-south wall" reading). `X` spans Z
+    /// (width) and Y (height), facing +X/-X (an "east-west wall" reading).
+    enum class PlateAxis { Z, X };
+
+    /// @brief The "InnerFlatPlate" render mode identified by
+    /// mobile-eggbert-reference/questionnaire-all-remaining-tiles.md: a
+    /// single flat double-sided plate centered inside an otherwise fully
+    /// transparent block (e.g. a signpost, thin post, or screen) — the
+    /// block's outer 6 faces are simply never drawn at all by the caller,
+    /// this only builds the plate itself.
+    struct PlateItem
+    {
+        Microsoft::Xna::Framework::Vector3 Center;
+        float Width = 1.0f;  // extent along the in-plane horizontal axis
+        float Height = 1.0f; // extent along Y
+        UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};
+        PlateAxis Axis = PlateAxis::Z;
+    };
+
+    /// @brief Appends @p item as two coincident quads with opposite winding
+    /// (8 vertices, 12 indices) — genuinely double-sided regardless of the
+    /// renderer's backface-culling state, unlike a single quad which would
+    /// only be visible from one side under standard CCW culling.
+    void AppendPlateMesh(const PlateItem& item,
+                         std::vector<CubeVertex>& vertices,
+                         std::vector<std::uint32_t>& indices);
+
+    /// @brief The "TripleCrossBillboard" render mode identified by
+    /// mobile-eggbert-reference/questionnaire-all-remaining-tiles.md: the
+    /// same texture drawn on 3 vertical double-sided planes through the
+    /// block's center, each 60° apart around Y, forming a triangle in plan
+    /// view (a 3-plane generalization of the classic 2-plane "cross"
+    /// billboard used for plants). Rotationally symmetric by construction —
+    /// no per-icon facing decision is needed, unlike `PlateItem`/
+    /// `DirectionalCubeItem`.
+    struct TripleCrossItem
+    {
+        Microsoft::Xna::Framework::Vector3 Center;
+        float Width = 1.0f;
+        float Height = 1.0f;
+        UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};
+    };
+
+    /// @brief Appends @p item as 3 `PlateItem`-style double-sided planes (24
+    /// vertices, 36 indices total), each pair of adjacent planes 60° apart
+    /// around Y.
+    void AppendTripleCrossMesh(const TripleCrossItem& item,
+                               std::vector<CubeVertex>& vertices,
+                               std::vector<std::uint32_t>& indices);
 }

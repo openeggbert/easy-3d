@@ -254,6 +254,93 @@ int main()
         }
     }
 
+    // --- AppendPlateMesh: Z axis -- double-sided, 8 vertices/12 indices ----
+    {
+        Easy3D::PlateItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Width = 1.0f;
+        item.Height = 2.0f;
+        item.Axis = Easy3D::PlateAxis::Z;
+        item.Uv = Easy3D::UvRect{0.0f, 0.0f, 1.0f, 1.0f};
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendPlateMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 8);
+        CHECK(indices.size() == 12);
+        // All vertices lie in the Z=0 plane; X within [-0.5,0.5], Y within [-1,1].
+        for (const auto& v : vertices) {
+            CHECK(approx(v.Position.Z, 0.0f));
+            CHECK(v.Position.X >= -0.5001f && v.Position.X <= 0.5001f);
+            CHECK(v.Position.Y >= -1.0001f && v.Position.Y <= 1.0001f);
+        }
+        for (auto i : indices) {
+            CHECK(i < vertices.size());
+        }
+        // Both windings present: first triangle uses base+0,1,2, second
+        // (back) copy uses base+4,6,5 (reversed) for the duplicated verts.
+        CHECK(indices[0] == 0 && indices[1] == 1 && indices[2] == 2);
+        CHECK(indices[6] == 4 && indices[7] == 6 && indices[8] == 5);
+    }
+
+    // --- AppendPlateMesh: X axis -- lies in the X=0 plane instead ----------
+    {
+        Easy3D::PlateItem item;
+        item.Center = Vector3(3.0f, 0.0f, 0.0f);
+        item.Width = 1.0f;
+        item.Height = 1.0f;
+        item.Axis = Easy3D::PlateAxis::X;
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendPlateMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 8);
+        for (const auto& v : vertices) {
+            CHECK(approx(v.Position.X, 3.0f));
+        }
+    }
+
+    // --- AppendTripleCrossMesh: 3 double-sided planes, 24 verts/36 indices -
+    {
+        Easy3D::TripleCrossItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Width = 1.0f;
+        item.Height = 1.0f;
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendTripleCrossMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 24);
+        CHECK(indices.size() == 36);
+        for (auto i : indices) {
+            CHECK(i < vertices.size());
+        }
+        // Every vertex is within the block's half-extent radius (half-width
+        // horizontally, half-height vertically) -- no plane extends beyond
+        // the block.
+        for (const auto& v : vertices) {
+            const float horizDist = std::sqrt(v.Position.X * v.Position.X + v.Position.Z * v.Position.Z);
+            CHECK(horizDist <= 0.5001f);
+            CHECK(v.Position.Y >= -0.5001f && v.Position.Y <= 0.5001f);
+        }
+        // The first plane (0 deg) lies in the Z=0 plane, same as a PlateAxis::Z plate.
+        for (std::size_t i = 0; i < 8; ++i) {
+            CHECK(approx(vertices[i].Position.Z, 0.0f));
+        }
+        // The second plane (60 deg) does NOT lie flat in Z=0 or X=0 --
+        // confirms it's actually rotated, not a duplicate of the first.
+        bool anyOffAxis = false;
+        for (std::size_t i = 8; i < 16; ++i) {
+            if (!approx(vertices[i].Position.Z, 0.0f) && !approx(vertices[i].Position.X, 0.0f)) {
+                anyOffAxis = true;
+            }
+        }
+        CHECK(anyOffAxis);
+    }
+
     if (g_failures == 0) {
         std::printf("easy3d cube mesh test: OK\n");
     }
