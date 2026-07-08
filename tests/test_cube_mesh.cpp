@@ -139,6 +139,121 @@ int main()
         CHECK(indices.empty());
     }
 
+    // --- AppendDirectionalCubeMesh: all 6 faces visible, default UV --------
+    // behaves like AppendCubeMesh with a full-texture UV on every face.
+    {
+        Easy3D::DirectionalCubeItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Size = Vector3(2.0f, 2.0f, 2.0f);
+        // Faces[] default-construct to {Visible=true, Uv={0,0,1,1}}.
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendDirectionalCubeMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 24);
+        CHECK(indices.size() == 36);
+        for (const auto& v : vertices) {
+            CHECK(v.Position.X >= -1.0001f && v.Position.X <= 1.0001f);
+            CHECK(v.Position.Y >= -1.0001f && v.Position.Y <= 1.0001f);
+            CHECK(v.Position.Z >= -1.0001f && v.Position.Z <= 1.0001f);
+        }
+    }
+
+    // --- AppendDirectionalCubeMesh: DirectionalCube's actual use case ------
+    // (icon 200 "Platform"/grate: 4 side faces textured, top/bottom
+    // genuinely open -- omitted, not just untextured) -- 4 faces emitted,
+    // not 6, and top/bottom contribute no geometry at all.
+    {
+        Easy3D::DirectionalCubeItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Size = Vector3(1.0f, 1.0f, 1.0f);
+        const Easy3D::UvRect sideUv{0.1f, 0.2f, 0.3f, 0.4f};
+        for (int face = 0; face < 6; ++face) {
+            const bool isTopOrBottom =
+                face == static_cast<int>(Easy3D::CubeFace::PosY) ||
+                face == static_cast<int>(Easy3D::CubeFace::NegY);
+            item.Faces[face].Visible = !isTopOrBottom;
+            item.Faces[face].Uv = sideUv;
+        }
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendDirectionalCubeMesh(item, vertices, indices);
+
+        // 4 visible faces x 4 vertices, 4 faces x 6 indices -- not 6 faces.
+        CHECK(vertices.size() == 16);
+        CHECK(indices.size() == 24);
+
+        // No emitted face is a whole top/bottom face -- side faces legally
+        // touch Y=+-0.5 at two of their four corners, so the real invariant
+        // is "no group of 4 consecutive vertices (one face) has ALL FOUR
+        // corners at a constant Y" -- that pattern only occurs for a true
+        // top/bottom face, which must be entirely absent here.
+        CHECK(vertices.size() % 4 == 0);
+        for (std::size_t face = 0; face * 4 < vertices.size(); ++face) {
+            const float y0 = vertices[face * 4 + 0].Position.Y;
+            const bool allSameY = approx(vertices[face * 4 + 1].Position.Y, y0) &&
+                                   approx(vertices[face * 4 + 2].Position.Y, y0) &&
+                                   approx(vertices[face * 4 + 3].Position.Y, y0);
+            CHECK(!(allSameY && (approx(y0, 0.5f) || approx(y0, -0.5f))));
+        }
+
+        // Every emitted vertex carries the side faces' UV.
+        for (const auto& v : vertices) {
+            CHECK((approx(v.Uv.X, 0.1f) || approx(v.Uv.X, 0.3f)));
+            CHECK((approx(v.Uv.Y, 0.2f) || approx(v.Uv.Y, 0.4f)));
+        }
+
+        // Every index refers to a valid vertex.
+        for (auto i : indices) {
+            CHECK(i < vertices.size());
+        }
+    }
+
+    // --- AppendDirectionalCubeMesh: all faces invisible produces nothing ---
+    {
+        Easy3D::DirectionalCubeItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Size = Vector3(1.0f, 1.0f, 1.0f);
+        for (auto& face : item.Faces) {
+            face.Visible = false;
+        }
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendDirectionalCubeMesh(item, vertices, indices);
+        CHECK(vertices.empty());
+        CHECK(indices.empty());
+    }
+
+    // --- AppendDirectionalCubeMesh: per-face UV, one face at a time --------
+    // (each face can carry a genuinely different UV, unlike CubeItem's
+    // single shared Uv).
+    {
+        Easy3D::DirectionalCubeItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.Size = Vector3(1.0f, 1.0f, 1.0f);
+        for (auto& face : item.Faces) {
+            face.Visible = false;
+        }
+        item.Faces[static_cast<int>(Easy3D::CubeFace::PosZ)].Visible = true;
+        item.Faces[static_cast<int>(Easy3D::CubeFace::PosZ)].Uv = Easy3D::UvRect{0.6f, 0.7f, 0.8f, 0.9f};
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendDirectionalCubeMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 4);
+        CHECK(indices.size() == 6);
+        for (const auto& v : vertices) {
+            CHECK((approx(v.Uv.X, 0.6f) || approx(v.Uv.X, 0.8f)));
+            CHECK((approx(v.Uv.Y, 0.7f) || approx(v.Uv.Y, 0.9f)));
+            // +Z face sits at Z=+0.5.
+            CHECK(approx(v.Position.Z, 0.5f));
+        }
+    }
+
     if (g_failures == 0) {
         std::printf("easy3d cube mesh test: OK\n");
     }

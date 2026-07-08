@@ -44,4 +44,42 @@ namespace Easy3D
     void BuildCubeMesh(const CubeBatch& batch,
                        std::vector<CubeVertex>& vertices,
                        std::vector<std::uint32_t>& indices);
+
+    /// @brief Face index into `DirectionalCubeItem::Faces`, in the same order
+    /// `AppendCubeMesh` emits faces internally: +Z, -Z, +X, -X, +Y (top), -Y
+    /// (bottom).
+    enum class CubeFace : int { PosZ = 0, NegZ = 1, PosX = 2, NegX = 3, PosY = 4, NegY = 5 };
+
+    /// @brief One face of a `DirectionalCubeItem` — the "DirectionalCube"
+    /// render mode identified by mobile-eggbert-reference/
+    /// questionnaire-all-remaining-tiles.md: a cube where only some faces
+    /// carry a real texture; a `Visible == false` face is a genuine geometric
+    /// hole (e.g. an open grate), not just untextured. Deliberately has no
+    /// notion of "flat fallback color" — a caller wanting that effect (e.g.
+    /// "same blue as the icon's own background") picks a suitable `Uv`
+    /// sub-rect of the existing atlas texture (such as a corner swatch of the
+    /// tile's own icon) rather than Easy3D growing a second, color-only
+    /// vertex/shader path.
+    struct DirectionalCubeFace
+    {
+        bool Visible = true;
+        UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};
+    };
+
+    /// @brief A cube where each of the 6 faces independently chooses its own
+    /// UV region and whether it's emitted at all (see `DirectionalCubeFace`).
+    struct DirectionalCubeItem
+    {
+        Microsoft::Xna::Framework::Vector3 Center;
+        Microsoft::Xna::Framework::Vector3 Size;
+        DirectionalCubeFace Faces[6];
+    };
+
+    /// @brief Appends @p item's visible faces to existing output arrays, same
+    /// concatenation/offset behavior as `AppendCubeMesh`. Faces with
+    /// `Visible == false` are omitted entirely (no vertices/indices emitted
+    /// for them) rather than drawn with a degenerate/invisible material.
+    void AppendDirectionalCubeMesh(const DirectionalCubeItem& item,
+                                   std::vector<CubeVertex>& vertices,
+                                   std::vector<std::uint32_t>& indices);
 }
