@@ -54,8 +54,11 @@ int main()
             CHECK(approx(v.Position.Z, 0.0f));
         }
 
-        CHECK(indices[0] == 0 && indices[1] == 1 && indices[2] == 2);
-        CHECK(indices[3] == 0 && indices[4] == 2 && indices[5] == 3);
+        // Winding reversed 2026-07-09 (0,2,1 / 0,3,2, not 0,1,2 / 0,2,3) --
+        // the old order was back-facing under the common default
+        // CullCounterClockwise rasterizer state, see BillboardMesh.cpp.
+        CHECK(indices[0] == 0 && indices[1] == 2 && indices[2] == 1);
+        CHECK(indices[3] == 0 && indices[4] == 3 && indices[5] == 2);
 
         // World "up" (top corners) maps to texture V0 (top of a top-down
         // image), world "down" maps to V1 -- matches a sprite's usual
