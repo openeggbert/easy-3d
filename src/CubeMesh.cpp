@@ -11,27 +11,36 @@ namespace Easy3D
     namespace
     {
         // Four corners per face, one array per face, {+Z, -Z, +X, -X, +Y, -Y}
-        // — matches the CubeFace enum's ordering. The 4 side faces (+-X/+-Z)
-        // are CCW as seen from outside (outward normal = (v1-v0) x (v2-v0)).
-        // +Y/-Y are DELIBERATELY the opposite of that (fixed 2026-07-10,
-        // see test_cube_mesh.cpp's winding-regression test for the full
-        // writeup): the textbook CCW-from-outside winding for +Y/-Y silently
-        // failed to rasterize under CNA's real default
-        // RasterizerState::CullCounterClockwise, empirically confirmed live
-        // in galaxy-eggbert (a freestanding block's top face was invisible,
-        // revealing whatever was behind it) — this is not yet root-caused at
-        // the view-matrix/projection level, just empirically fixed and
-        // covered by a test so it can't silently regress back to "textbook
-        // consistent."
+        // — matches the CubeFace enum's ordering. ALL SIX faces are wound
+        // CLOCKWISE as seen from outside the cube (the right-hand-rule cross
+        // product (v1-v0) x (v2-v0) points INTO the cube) — this is the XNA
+        // front-face convention, NOT the OpenGL-textbook CCW one. Root cause
+        // finally identified 2026-07-10 (galaxy-eggbert "front/side faces
+        // don't render" report): CNA implements genuine XNA culling — under
+        // the default RasterizerState::CullCounterClockwise, triangles that
+        // appear visually CLOCKWISE on screen survive (verified three ways:
+        // CNA's own contrast-checked cullmode golden test, FNA SpriteBatch's
+        // visually-CW quads, and live in galaxy-eggbert where billboards
+        // only became visible once re-wound to visually-CW). This file
+        // originally used the OpenGL CCW-from-outside convention for all 6
+        // faces, so every face was invisible from outside and scenes
+        // "worked" only by showing the mirrored interiors of opposite
+        // faces; the 2026-07-10 +Y/-Y reversal ("empirically fixed, not
+        // root-caused") was the first half of this fix, and the 4 side
+        // faces are now reversed to match. The corner order is
+        // top-left, top-right, bottom-right, bottom-left AS SEEN FROM
+        // OUTSIDE each face, which under AppendFace's fixed corner->UV
+        // pairing also puts U0 at the left and V0 at the top of the visible
+        // face (upright, unmirrored textures).
         void ComputeFaceCorners(const Vector3& min, const Vector3& max, Vector3 outCorners[6][4])
         {
             const Vector3 faceCorners[6][4] = {
-                {{min.X, min.Y, max.Z}, {max.X, min.Y, max.Z}, {max.X, max.Y, max.Z}, {min.X, max.Y, max.Z}}, // +Z
-                {{max.X, min.Y, min.Z}, {min.X, min.Y, min.Z}, {min.X, max.Y, min.Z}, {max.X, max.Y, min.Z}}, // -Z
-                {{max.X, min.Y, max.Z}, {max.X, min.Y, min.Z}, {max.X, max.Y, min.Z}, {max.X, max.Y, max.Z}}, // +X
-                {{min.X, min.Y, min.Z}, {min.X, min.Y, max.Z}, {min.X, max.Y, max.Z}, {min.X, max.Y, min.Z}}, // -X
-                {{min.X, max.Y, min.Z}, {max.X, max.Y, min.Z}, {max.X, max.Y, max.Z}, {min.X, max.Y, max.Z}}, // +Y (inverted, see above)
-                {{min.X, min.Y, max.Z}, {max.X, min.Y, max.Z}, {max.X, min.Y, min.Z}, {min.X, min.Y, min.Z}}, // -Y (inverted, see above)
+                {{min.X, max.Y, max.Z}, {max.X, max.Y, max.Z}, {max.X, min.Y, max.Z}, {min.X, min.Y, max.Z}}, // +Z
+                {{max.X, max.Y, min.Z}, {min.X, max.Y, min.Z}, {min.X, min.Y, min.Z}, {max.X, min.Y, min.Z}}, // -Z
+                {{max.X, max.Y, max.Z}, {max.X, max.Y, min.Z}, {max.X, min.Y, min.Z}, {max.X, min.Y, max.Z}}, // +X
+                {{min.X, max.Y, min.Z}, {min.X, max.Y, max.Z}, {min.X, min.Y, max.Z}, {min.X, min.Y, min.Z}}, // -X
+                {{min.X, max.Y, min.Z}, {max.X, max.Y, min.Z}, {max.X, max.Y, max.Z}, {min.X, max.Y, max.Z}}, // +Y
+                {{min.X, min.Y, max.Z}, {max.X, min.Y, max.Z}, {max.X, min.Y, min.Z}, {min.X, min.Y, min.Z}}, // -Y
             };
             for (int face = 0; face < 6; ++face)
             {

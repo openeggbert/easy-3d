@@ -54,11 +54,14 @@ int main()
             CHECK(i < vertices.size());
         }
 
-        // The +Z face is emitted first: (-1,-1,1), (1,-1,1), (1,1,1), (-1,1,1).
-        CHECK(approx(vertices[0].Position.X, -1.0f) && approx(vertices[0].Position.Y, -1.0f) && approx(vertices[0].Position.Z, 1.0f));
-        CHECK(approx(vertices[1].Position.X, 1.0f) && approx(vertices[1].Position.Y, -1.0f) && approx(vertices[1].Position.Z, 1.0f));
-        CHECK(approx(vertices[2].Position.X, 1.0f) && approx(vertices[2].Position.Y, 1.0f) && approx(vertices[2].Position.Z, 1.0f));
-        CHECK(approx(vertices[3].Position.X, -1.0f) && approx(vertices[3].Position.Y, 1.0f) && approx(vertices[3].Position.Z, 1.0f));
+        // The +Z face is emitted first, corner order top-left, top-right,
+        // bottom-right, bottom-left as seen from outside (+Z looking -Z) --
+        // the XNA clockwise-from-outside front-face convention (see
+        // ComputeFaceCorners' comment): (-1,1,1), (1,1,1), (1,-1,1), (-1,-1,1).
+        CHECK(approx(vertices[0].Position.X, -1.0f) && approx(vertices[0].Position.Y, 1.0f) && approx(vertices[0].Position.Z, 1.0f));
+        CHECK(approx(vertices[1].Position.X, 1.0f) && approx(vertices[1].Position.Y, 1.0f) && approx(vertices[1].Position.Z, 1.0f));
+        CHECK(approx(vertices[2].Position.X, 1.0f) && approx(vertices[2].Position.Y, -1.0f) && approx(vertices[2].Position.Z, 1.0f));
+        CHECK(approx(vertices[3].Position.X, -1.0f) && approx(vertices[3].Position.Y, -1.0f) && approx(vertices[3].Position.Z, 1.0f));
 
         // First triangle of the +Z face: base+0, base+1, base+2.
         CHECK(indices[0] == 0 && indices[1] == 1 && indices[2] == 2);
@@ -362,29 +365,27 @@ int main()
         CHECK(anyOffAxis);
     }
 
-    // --- AppendDirectionalCubeMesh: each face's winding matches the
-    // direction proven to actually render under CNA's real default
-    // RasterizerState::CullCounterClockwise -- regression test for a real
-    // bug (2026-07-10): a freestanding block's top face was silently
-    // invisible from outside (live symptom found in galaxy-eggbert: a
-    // pillar's top face missing, revealing the floor "through" it).
+    // --- AppendDirectionalCubeMesh: each face's winding matches XNA's
+    // front-face convention -- regression test, root-caused 2026-07-10
+    // (superseding this test's earlier "empirically fixed, not
+    // root-caused" state where only +Y/-Y had been reversed).
     //
-    // The 4 side faces (+-X/+-Z) use the textbook "CCW as seen from
-    // outside" convention -- for THOSE 4, the first triangle's
-    // cross(v1-v0, v2-v0) points away from the cube's center, and that's
-    // what actually renders. +Y/-Y are the OPPOSITE of that textbook
-    // convention (cross product points INWARD, toward the cube's center) --
-    // confirmed empirically live in galaxy-eggbert (a real GraphicsDevice/
-    // window, not geometry math alone): the textbook-CCW winding for +Y/-Y
-    // silently failed to rasterize, and this inverted winding is what
-    // actually shows the correct brick top face. This is real, reproduced,
-    // and not yet root-caused at the view-matrix/projection level (CNA is
-    // documented left-handed elsewhere in this codebase -- see
-    // ../cna-craft's ChunkMesher.cpp comment -- which plausibly explains an
-    // up-axis-specific handedness quirk, but that has not been proven here).
-    // Encode the EMPIRICALLY-correct convention, not the textbook one, so a
-    // "helpful" cleanup that makes all 6 faces textbook-consistent silently
-    // reintroduces this exact bug.
+    // ALL SIX faces are wound CLOCKWISE as seen from outside the cube: the
+    // first triangle's cross(v1-v0, v2-v0) points INWARD, toward the cube's
+    // center. Rationale (see ComputeFaceCorners' comment in CubeMesh.cpp
+    // for the full writeup): CNA implements genuine XNA culling semantics
+    // -- under the default RasterizerState::CullCounterClockwise, the
+    // triangles that survive are the ones that appear visually CLOCKWISE
+    // on screen (the same convention FNA SpriteBatch quads and XNA's
+    // canonical tutorial triangle use). The OpenGL-textbook
+    // CCW-from-outside winding this file originally used is the exact
+    // OPPOSITE, making every face invisible from outside -- scenes only
+    // "looked right" by showing the mirrored interiors of each cube's far
+    // faces, which broke down visibly wherever no opposite face existed
+    // (galaxy-eggbert 2026-07-10: pillar front faces missing, staircases
+    // see-through to the background). A "helpful" cleanup back to the GL
+    // textbook convention reintroduces exactly that bug -- keep all 6
+    // expected normals INWARD.
     {
         constexpr Easy3D::CubeFace kFaces[6] = {
             Easy3D::CubeFace::PosZ, Easy3D::CubeFace::NegZ,
@@ -392,8 +393,8 @@ int main()
             Easy3D::CubeFace::PosY, Easy3D::CubeFace::NegY,
         };
         const Vector3 kExpectedNormal[6] = {
-            Vector3(0.0f, 0.0f, 1.0f), Vector3(0.0f, 0.0f, -1.0f),
-            Vector3(1.0f, 0.0f, 0.0f), Vector3(-1.0f, 0.0f, 0.0f),
+            Vector3(0.0f, 0.0f, -1.0f), Vector3(0.0f, 0.0f, 1.0f),
+            Vector3(-1.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f),
             Vector3(0.0f, -1.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f),
         };
         for (int i = 0; i < 6; ++i) {
