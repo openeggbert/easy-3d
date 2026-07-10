@@ -10,9 +10,19 @@ namespace Easy3D
 
     namespace
     {
-        // Four corners per face, CCW as seen from outside (outward normal =
-        // (v1-v0) x (v2-v0)); one array per face, {+Z, -Z, +X, -X, +Y, -Y} —
-        // matches the CubeFace enum's ordering.
+        // Four corners per face, one array per face, {+Z, -Z, +X, -X, +Y, -Y}
+        // — matches the CubeFace enum's ordering. The 4 side faces (+-X/+-Z)
+        // are CCW as seen from outside (outward normal = (v1-v0) x (v2-v0)).
+        // +Y/-Y are DELIBERATELY the opposite of that (fixed 2026-07-10,
+        // see test_cube_mesh.cpp's winding-regression test for the full
+        // writeup): the textbook CCW-from-outside winding for +Y/-Y silently
+        // failed to rasterize under CNA's real default
+        // RasterizerState::CullCounterClockwise, empirically confirmed live
+        // in galaxy-eggbert (a freestanding block's top face was invisible,
+        // revealing whatever was behind it) — this is not yet root-caused at
+        // the view-matrix/projection level, just empirically fixed and
+        // covered by a test so it can't silently regress back to "textbook
+        // consistent."
         void ComputeFaceCorners(const Vector3& min, const Vector3& max, Vector3 outCorners[6][4])
         {
             const Vector3 faceCorners[6][4] = {
@@ -20,8 +30,8 @@ namespace Easy3D
                 {{max.X, min.Y, min.Z}, {min.X, min.Y, min.Z}, {min.X, max.Y, min.Z}, {max.X, max.Y, min.Z}}, // -Z
                 {{max.X, min.Y, max.Z}, {max.X, min.Y, min.Z}, {max.X, max.Y, min.Z}, {max.X, max.Y, max.Z}}, // +X
                 {{min.X, min.Y, min.Z}, {min.X, min.Y, max.Z}, {min.X, max.Y, max.Z}, {min.X, max.Y, min.Z}}, // -X
-                {{min.X, max.Y, max.Z}, {max.X, max.Y, max.Z}, {max.X, max.Y, min.Z}, {min.X, max.Y, min.Z}}, // +Y
-                {{min.X, min.Y, min.Z}, {max.X, min.Y, min.Z}, {max.X, min.Y, max.Z}, {min.X, min.Y, max.Z}}, // -Y
+                {{min.X, max.Y, min.Z}, {max.X, max.Y, min.Z}, {max.X, max.Y, max.Z}, {min.X, max.Y, max.Z}}, // +Y (inverted, see above)
+                {{min.X, min.Y, max.Z}, {max.X, min.Y, max.Z}, {max.X, min.Y, min.Z}, {min.X, min.Y, min.Z}}, // -Y (inverted, see above)
             };
             for (int face = 0; face < 6; ++face)
             {

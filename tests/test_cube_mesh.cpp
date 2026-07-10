@@ -362,6 +362,72 @@ int main()
         CHECK(anyOffAxis);
     }
 
+    // --- AppendDirectionalCubeMesh: each face's winding matches the
+    // direction proven to actually render under CNA's real default
+    // RasterizerState::CullCounterClockwise -- regression test for a real
+    // bug (2026-07-10): a freestanding block's top face was silently
+    // invisible from outside (live symptom found in galaxy-eggbert: a
+    // pillar's top face missing, revealing the floor "through" it).
+    //
+    // The 4 side faces (+-X/+-Z) use the textbook "CCW as seen from
+    // outside" convention -- for THOSE 4, the first triangle's
+    // cross(v1-v0, v2-v0) points away from the cube's center, and that's
+    // what actually renders. +Y/-Y are the OPPOSITE of that textbook
+    // convention (cross product points INWARD, toward the cube's center) --
+    // confirmed empirically live in galaxy-eggbert (a real GraphicsDevice/
+    // window, not geometry math alone): the textbook-CCW winding for +Y/-Y
+    // silently failed to rasterize, and this inverted winding is what
+    // actually shows the correct brick top face. This is real, reproduced,
+    // and not yet root-caused at the view-matrix/projection level (CNA is
+    // documented left-handed elsewhere in this codebase -- see
+    // ../cna-craft's ChunkMesher.cpp comment -- which plausibly explains an
+    // up-axis-specific handedness quirk, but that has not been proven here).
+    // Encode the EMPIRICALLY-correct convention, not the textbook one, so a
+    // "helpful" cleanup that makes all 6 faces textbook-consistent silently
+    // reintroduces this exact bug.
+    {
+        constexpr Easy3D::CubeFace kFaces[6] = {
+            Easy3D::CubeFace::PosZ, Easy3D::CubeFace::NegZ,
+            Easy3D::CubeFace::PosX, Easy3D::CubeFace::NegX,
+            Easy3D::CubeFace::PosY, Easy3D::CubeFace::NegY,
+        };
+        const Vector3 kExpectedNormal[6] = {
+            Vector3(0.0f, 0.0f, 1.0f), Vector3(0.0f, 0.0f, -1.0f),
+            Vector3(1.0f, 0.0f, 0.0f), Vector3(-1.0f, 0.0f, 0.0f),
+            Vector3(0.0f, -1.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f),
+        };
+        for (int i = 0; i < 6; ++i) {
+            Easy3D::DirectionalCubeItem item;
+            item.Center = Vector3(0.0f, 0.0f, 0.0f);
+            item.Size = Vector3(1.0f, 1.0f, 1.0f);
+            for (auto& face : item.Faces) face.Visible = false;
+            item.Faces[static_cast<int>(kFaces[i])].Visible = true;
+
+            std::vector<Easy3D::CubeVertex> vertices;
+            std::vector<std::uint32_t> indices;
+            Easy3D::AppendDirectionalCubeMesh(item, vertices, indices);
+
+            CHECK(vertices.size() == 4);
+            CHECK(indices.size() == 6);
+            if (vertices.size() != 4 || indices.size() != 6) {
+                continue;
+            }
+
+            const Vector3& v0 = vertices[indices[0]].Position;
+            const Vector3& v1 = vertices[indices[1]].Position;
+            const Vector3& v2 = vertices[indices[2]].Position;
+            const Vector3 a = v1 - v0;
+            const Vector3 b = v2 - v0;
+            const Vector3 normal(a.Y * b.Z - a.Z * b.Y,
+                                  a.Z * b.X - a.X * b.Z,
+                                  a.X * b.Y - a.Y * b.X);
+            const Vector3& expected = kExpectedNormal[i];
+            CHECK(approx(normal.X, expected.X) &&
+                  approx(normal.Y, expected.Y) &&
+                  approx(normal.Z, expected.Z));
+        }
+    }
+
     if (g_failures == 0) {
         std::printf("easy3d cube mesh test: OK\n");
     }
