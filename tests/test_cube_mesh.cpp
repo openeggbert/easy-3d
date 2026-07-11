@@ -365,6 +365,63 @@ int main()
         CHECK(anyOffAxis);
     }
 
+    // --- AppendPyramidTipMesh: 1 square face + 4 triangles, 16 verts/18
+    // indices (AppendFace always emits 4 fresh vertices for the square, and
+    // each triangle emits 3 more of its own -- none shared) -------------
+    {
+        Easy3D::PyramidTipItem item;
+        item.Center = Vector3(0.0f, 0.0f, 0.0f);
+        item.BaseSize = 1.0f;
+        item.Height = 0.5f;
+
+        std::vector<Easy3D::CubeVertex> vertices;
+        std::vector<std::uint32_t> indices;
+        Easy3D::AppendPyramidTipMesh(item, vertices, indices);
+
+        CHECK(vertices.size() == 16);
+        CHECK(indices.size() == 18);
+        for (auto i : indices) {
+            CHECK(i < vertices.size());
+        }
+
+        // The square top face (first 4 vertices) all sit flush at Center.Y,
+        // within the base's half-extent horizontally.
+        for (std::size_t i = 0; i < 4; ++i) {
+            CHECK(approx(vertices[i].Position.Y, 0.0f));
+            CHECK(std::fabs(vertices[i].Position.X) <= 0.5001f);
+            CHECK(std::fabs(vertices[i].Position.Z) <= 0.5001f);
+        }
+
+        // Each of the 4 triangular side faces (3 fresh vertices each,
+        // starting right after the square's 4) has its 3rd vertex at the
+        // apex: centered horizontally, Height below Center.Y -- and all 4
+        // apexes are the SAME point, proving the faces genuinely share one
+        // vertex (unlike the box design this replaced).
+        for (int tri = 0; tri < 4; ++tri) {
+            const std::size_t base = 4 + 3 * static_cast<std::size_t>(tri);
+            const auto& apex = vertices[base + 2].Position;
+            CHECK(approx(apex.X, 0.0f));
+            CHECK(approx(apex.Y, -0.5f));
+            CHECK(approx(apex.Z, 0.0f));
+        }
+
+        // Winding: the square top face is CW-from-outside as seen from
+        // below (matching AppendFace's -Y face convention elsewhere in this
+        // file), i.e. cross(v1-v0, v2-v0) points toward +Y (into the solid
+        // block sitting above the pyramid's flat top).
+        {
+            const Vector3 v0 = vertices[0].Position;
+            const Vector3 v1 = vertices[1].Position;
+            const Vector3 v2 = vertices[2].Position;
+            const Vector3 e1 = v1 - v0;
+            const Vector3 e2 = v2 - v0;
+            const Vector3 cross(e1.Y * e2.Z - e1.Z * e2.Y,
+                                 e1.Z * e2.X - e1.X * e2.Z,
+                                 e1.X * e2.Y - e1.Y * e2.X);
+            CHECK(cross.Y > 0.0f);
+        }
+    }
+
     // --- AppendDirectionalCubeMesh: each face's winding matches XNA's
     // front-face convention -- regression test, root-caused 2026-07-10
     // (superseding this test's earlier "empirically fixed, not

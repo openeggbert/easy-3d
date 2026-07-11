@@ -235,4 +235,43 @@ namespace Easy3D
         }
     }
 
+    void AppendPyramidTipMesh(const PyramidTipItem& item,
+                              std::vector<CubeVertex>& vertices,
+                              std::vector<std::uint32_t>& indices)
+    {
+        const float half = item.BaseSize * 0.5f;
+        // Same 4-corner order as ComputeFaceCorners' own -Y face ({min.X,
+        // min.Y, max.Z}, {max.X, min.Y, max.Z}, {max.X, min.Y, min.Z},
+        // {min.X, min.Y, min.Z}) -- already proven CW-from-outside/visible-
+        // from-below by this file's own established convention, so reusing
+        // it verbatim (just centered on item.Center instead of a cube's
+        // min/max) keeps both the square top face AND (by the same
+        // rotational construction, verified by hand via the right-hand-rule
+        // cross product) all 4 triangular side faces correctly wound.
+        const Vector3 baseCorners[4] = {
+            Vector3(item.Center.X - half, item.Center.Y, item.Center.Z + half),
+            Vector3(item.Center.X + half, item.Center.Y, item.Center.Z + half),
+            Vector3(item.Center.X + half, item.Center.Y, item.Center.Z - half),
+            Vector3(item.Center.X - half, item.Center.Y, item.Center.Z - half),
+        };
+        const Vector3 apex(item.Center.X, item.Center.Y - item.Height, item.Center.Z);
+
+        AppendFace(baseCorners, item.Uv, vertices, indices);
+
+        const Vector2 uvA{item.Uv.U0, item.Uv.V0};
+        const Vector2 uvB{item.Uv.U1, item.Uv.V0};
+        const Vector2 uvApex{(item.Uv.U0 + item.Uv.U1) * 0.5f, item.Uv.V1};
+        for (int i = 0; i < 4; ++i)
+        {
+            const Vector3& a = baseCorners[i];
+            const Vector3& b = baseCorners[(i + 1) % 4];
+            const auto base = static_cast<std::uint32_t>(vertices.size());
+            vertices.push_back(CubeVertex{a, uvA});
+            vertices.push_back(CubeVertex{b, uvB});
+            vertices.push_back(CubeVertex{apex, uvApex});
+            indices.push_back(base + 0);
+            indices.push_back(base + 1);
+            indices.push_back(base + 2);
+        }
+    }
 }

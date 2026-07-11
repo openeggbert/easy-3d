@@ -139,4 +139,41 @@ namespace Easy3D
                                std::vector<CubeVertex>& vertices,
                                std::vector<std::uint32_t>& indices);
 
+    /// @brief An inverted square pyramid: a flat square face at `Center`'s Y
+    /// (typically flush with a block's own bottom face), tapering down to a
+    /// single point `Height` below it — a "hanging spike/stalactite"
+    /// attachment, e.g. the cone tip beneath a teleporter pillar
+    /// (galaxy-eggbert plan.md E3D-MIG-147). Re-added 2026-07-11 after a
+    /// brief detour through a non-tapering box shape: the box's 4 flat
+    /// side faces (each showing a triangle via an alpha cutout) don't
+    /// share a common vertex the way a real pyramid's 4 triangular faces
+    /// do, so adjacent faces' triangle graphics visibly failed to connect
+    /// at the block's 4 vertical edges — confirmed by direct user
+    /// inspection of a live screenshot ("ty hroty 4 textury trojúhelníku
+    /// nejsou dole svázané k sobě"). A genuine pyramid's faces meet at one
+    /// shared apex by construction, so this is structurally seamless.
+    /// Not one of the 4 confirmed terrain render modes from the
+    /// tile-identification questionnaires — a distinct, small "extra
+    /// geometry" attachment a caller layers on top of an existing cube/
+    /// DirectionalCube render, not a replacement for one.
+    struct PyramidTipItem
+    {
+        Microsoft::Xna::Framework::Vector3 Center; // center of the square top face
+        float BaseSize = 1.0f;                     // width/depth of the square top
+        float Height = 0.5f;                       // vertical drop from the top face to the apex
+        UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};          // shared by the top square and all 4 side triangles
+    };
+
+    /// @brief Appends @p item as 1 square face (matching `AppendFace`'s -Y
+    /// face winding/UV convention, so it's visible from below) + 4
+    /// triangular side faces tapering to the apex (5 faces total, 16
+    /// vertices, 18 indices -- `AppendFace` always emits 4 fresh vertices for
+    /// the square, and each triangle emits 3 more of its own; none are
+    /// shared). Each triangular face maps @p item's `Uv` with
+    /// its two base corners at (U0,V0)/(U1,V0) and the apex at the
+    /// horizontally-centered (U0+U1)/2,V1 — a tapering-to-a-point UV
+    /// mapping matching the tapering geometry.
+    void AppendPyramidTipMesh(const PyramidTipItem& item,
+                              std::vector<CubeVertex>& vertices,
+                              std::vector<std::uint32_t>& indices);
 }
