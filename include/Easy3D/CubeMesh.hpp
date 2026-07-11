@@ -138,4 +138,36 @@ namespace Easy3D
     void AppendTripleCrossMesh(const TripleCrossItem& item,
                                std::vector<CubeVertex>& vertices,
                                std::vector<std::uint32_t>& indices);
+
+    /// @brief An inverted square pyramid: a flat square face at `Center`'s Y
+    /// (typically flush with a block's own bottom face), tapering down to a
+    /// single point `Height` below it — a "hanging spike/stalactite"
+    /// attachment, e.g. the cone tip beneath a teleporter pillar
+    /// (galaxy-eggbert plan.md E3D-MIG-147, confirmed by direct user
+    /// inspection of the real icon crop: a flat top plate with colored
+    /// indicator dots + emblem letter, and a separate tapering cone
+    /// underneath). Not one of the 4 confirmed terrain render modes from
+    /// the tile-identification questionnaires — a distinct, small "extra
+    /// geometry" attachment a caller layers on top of an existing cube/
+    /// DirectionalCube render, not a replacement for one.
+    struct PyramidTipItem
+    {
+        Microsoft::Xna::Framework::Vector3 Center; // center of the square top face
+        float BaseSize = 1.0f;                     // width/depth of the square top
+        float Height = 0.5f;                       // vertical drop from the top face to the apex
+        UvRect Uv{0.0f, 0.0f, 1.0f, 1.0f};          // shared by the top square and all 4 side triangles
+    };
+
+    /// @brief Appends @p item as 1 square face (matching `AppendFace`'s -Y
+    /// face winding/UV convention, so it's visible from below) + 4
+    /// triangular side faces tapering to the apex (5 faces total, 16
+    /// vertices, 18 indices -- `AppendFace` always emits 4 fresh vertices for
+    /// the square, and each triangle emits 3 more of its own; none are
+    /// shared). Each triangular face maps @p item's `Uv` with
+    /// its two base corners at (U0,V0)/(U1,V0) and the apex at the
+    /// horizontally-centered (U0+U1)/2,V1 — a tapering-to-a-point UV
+    /// mapping matching the tapering geometry.
+    void AppendPyramidTipMesh(const PyramidTipItem& item,
+                              std::vector<CubeVertex>& vertices,
+                              std::vector<std::uint32_t>& indices);
 }
